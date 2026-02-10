@@ -1,0 +1,19 @@
+# Compiled objects and binaries
+*.o
+*.mod
+*.a
+*.so
+
+# Compiled objects forlder
+built/
+
+# Generated graphs
+*.png
+*.pdf
+*.jpg
+
+# System files
+*.out
+*.err
+*.log
+.DS_Store
