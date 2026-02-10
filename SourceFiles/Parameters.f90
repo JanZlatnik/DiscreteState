@@ -76,7 +76,6 @@ MODULE Parameters
     REAL(KIND = idk), PARAMETER :: m = 1.0d0        ! mass in [au]
     INTEGER, PARAMETER          :: l_ang = 0        ! angular momentum quantum number of the detached electron (l=0 for s-wave detachment, l=1 for p-wave detachment, etc.)
     REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]
-    REAL(KIND = idk), PARAMETER :: Creg = 0.0d0     ! Coulomb regularization parameter [au]
     REAL(KIND = idk), PARAMETER :: turnplus = 1.0d0 ! extention compared to the classical turning point [au]
     REAL(KIND = idk), PARAMETER :: xshort = 16.0d0  ! approximate maximal range of the SR potential [au]
     
@@ -187,7 +186,6 @@ MODULE Parameters
         WRITE(unit,*) "[Other Parameters]"
         WRITE(unit,'(A25,1X,F0.6)') "m:", m
         WRITE(unit,'(A25,1X,I0)')   "l:", l_ang
-        WRITE(unit,'(A25,1X,F0.6)') "Creg:", Creg
         WRITE(unit,'(A25,1X,F0.6)') "R0:", R0
         WRITE(unit,'(A25,1X,F0.6)') "turnplus:", turnplus
         WRITE(unit,'(A25,1X,F0.6)') "xshort:", xshort

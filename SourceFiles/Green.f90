@@ -1,9 +1,8 @@
-
 !-------------------------------------< Green >-------------------------------------!
 !                                                                                   !    
-! Contains: Green function for the equation [E-T_N-V]|psi> = |rightside>            !                                                                             
+! Contains: Green function for the equation [E-T_N-V]|psi> = |rightside>            !                                                                                     
 !                                                                                   !
-! Last revision:    25/09/2025                                                      !
+! Last revision:    04/02/2026                                                      !
 !                                                                                   !
 !-----------------------------------------------------------------------------------!
 
@@ -15,7 +14,8 @@ MODULE Green
     USE whittaker_w, only: coulomb_whittaker
     IMPLICIT NONE
     PRIVATE
-    PUBLIC :: apply_green, apply_green_LCP, apply_green_coulomb, apply_green_coulomb_bound, wronskian_16_real, apply_green_analytic_continuation
+    PUBLIC :: apply_green, apply_green_coulomb_bound, apply_green_analytic, general_asymptotic, analytic_asymptotic, general_free_solution
+
     
     INTERFACE apply_green
         MODULE PROCEDURE apply_green_real_vector
@@ -23,23 +23,19 @@ MODULE Green
         MODULE PROCEDURE apply_green_complex_vector
         MODULE PROCEDURE apply_green_complex_matrix
     END INTERFACE apply_green
-    
-    INTERFACE apply_green_coulomb
-        MODULE PROCEDURE apply_green_coulomb_real_matrix
-        MODULE PROCEDURE apply_green_coulomb_complex_matrix
-        MODULE PROCEDURE apply_green_coulomb_real_vector
-    END INTERFACE apply_green_coulomb
 
     INTERFACE apply_green_coulomb_bound
         MODULE PROCEDURE apply_green_coulomb_bound_real_vector
+        MODULE PROCEDURE apply_green_coulomb_bound_real_matrix
     END INTERFACE apply_green_coulomb_bound
-    
-    INTERFACE apply_green_LCP
-        MODULE PROCEDURE apply_green_real_vector_LCP
-        MODULE PROCEDURE apply_green_real_matrix_LCP
-        MODULE PROCEDURE apply_green_complex_vector_LCP
-        MODULE PROCEDURE apply_green_complex_matrix_LCP
-    END INTERFACE apply_green_LCP
+
+    INTERFACE apply_green_analytic
+        MODULE PROCEDURE apply_green_analytic_real_vector
+        MODULE PROCEDURE apply_green_analytic_real_matrix
+        MODULE PROCEDURE apply_green_analytic_complex_vector
+        MODULE PROCEDURE apply_green_analytic_complex_matrix
+    END INTERFACE apply_green_analytic
+
 
     ! Interface for R->R potential V(x)
     ABSTRACT INTERFACE
@@ -50,1419 +46,784 @@ MODULE Green
     END INTERFACE
 
     CONTAINS
-    ! Subroutine to apply the Green's function method to solve the previously mentioned differential equation.
-    ! |rightside> can be either a real/complex vector or a rectangular matrix (j,:), then the Green's function is applied on each j-th vector
 
-    SUBROUTINE apply_green_real_vector(x, E, m, ext, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, rightside(:), ext
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:), x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(SIZE(x)), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x_ext(i)))
-        END DO
-
-        DO i = 2, SIZE(x)-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(SIZE(x)-1)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-        
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
-        DEALLOCATE(yR,yI)
-
-        psi = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        DEALLOCATE(intR,intI,psi_I,psi_R)
-        
-    END SUBROUTINE apply_green_real_vector
-    
-    
-    SUBROUTINE apply_green_complex_vector(x, E, m, ext, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, ext
-        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:), x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x_ext(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-        
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
-        DEALLOCATE(yR,yI)
-
-        psi = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        DEALLOCATE(intR,intI,psi_I,psi_R)
-        
-    END SUBROUTINE apply_green_complex_vector
-    
-    
-    SUBROUTINE apply_green_real_matrix(x, E, m, ext, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, rightside(:,:), ext
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:), x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(SIZE(x)), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x_ext(i)))
-        END DO
-
-        DO i = 2, SIZE(x)-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(SIZE(x)-1)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-        IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-           
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI)
-
-    
-    END SUBROUTINE apply_green_real_matrix
-    
-    
-    SUBROUTINE apply_green_complex_matrix(x, E, m, ext, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, ext
-        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:,:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:), x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x_ext(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-    
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_complex_matrix
-    
-    SUBROUTINE apply_green_real_vector_LCP(x, E, m, ext, LCP, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, rightside(:), ext
-        COMPLEX(KIND=idk), INTENT(IN) :: LCP(:)
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        COMPLEX(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk), ALLOCATABLE :: x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - LCP(i))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-        
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
-        DEALLOCATE(yR,yI)
-
-        psi = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        DEALLOCATE(intR,intI,psi_I,psi_R)
-        
-    END SUBROUTINE apply_green_real_vector_LCP
-    
-    
-    SUBROUTINE apply_green_complex_vector_LCP(x, E, m, ext, LCP, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, ext
-        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:)
-        COMPLEX(KIND=idk), INTENT(IN) :: LCP(:)
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        COMPLEX(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk), ALLOCATABLE :: x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - LCP(i))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
+    ! Function to compute a generalized exp(i*k*x) asymptotics for higher partial waves and/or Coulomb potential. For E>0 it always returns H+ (outgoing wave), for E<0 it returns "real" decay function (Whittaker W for Coulomb, rotated H+ for free case).
+    FUNCTION general_asymptotic(x, E, m, Z, l) RESULT(val)
+        REAL(KIND=idk), INTENT(IN) :: x, E, m, Z
+        INTEGER, INTENT(IN) :: l
+        COMPLEX(KIND=idk) :: val
+        
+        REAL(KIND=idk) :: k, eta_real, kappa
+        COMPLEX(KIND=idk) :: zrho, zeta, zl_min
+        COMPLEX(KIND=idk) :: fc(1), gc(1), fcp(1), gcp(1), sig(1)
+        REAL(KIND=idk) :: w_whit, wd_whit
+        INTEGER :: ifail, sf_whit
+        INTEGER :: kfn, mode
+        
+        zl_min = CMPLX(l, 0.0d0, KIND=idk)
+        mode = 12
         
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
-        DEALLOCATE(yR,yI)
-
-        psi = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        DEALLOCATE(intR,intI,psi_I,psi_R)
-        
-    END SUBROUTINE apply_green_complex_vector_LCP
-    
-    
-    SUBROUTINE apply_green_real_matrix_LCP(x, E, m, ext, LCP, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, rightside(:,:), ext
-        COMPLEX(KIND=idk), INTENT(IN) :: LCP(:)
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        COMPLEX(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk), ALLOCATABLE :: x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - LCP(i))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-           
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-        
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-
-    
-    END SUBROUTINE apply_green_real_matrix_LCP
-    
-    
-    SUBROUTINE apply_green_complex_matrix_LCP(x, E, m, ext, LCP, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, ext
-        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:,:)
-        COMPLEX(KIND=idk), INTENT(IN) :: LCP(:)
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        COMPLEX(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk), ALLOCATABLE :: x_ext(:)
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        IF (ext > 1.0d0) THEN
-            n = CEILING(SIZE(x) * ext)
-            ALLOCATE(x_ext(n))
-            DO i = 1, SIZE(x)
-                x_ext(i) = x(i)
-            END DO
-            DO i = SIZE(x), n - 1
-                x_ext(i+1) = x_ext(i) + dx
-            END DO
-        ELSE
-            ALLOCATE(x_ext(n))
-            DO i = 1, n
-                x_ext(i) = x(i)
-            END DO
-        END IF
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            psi_I(n) = EXP(DCMPLX(0, k*x_ext(n)))
-            psi_I(n-1) = EXP(DCMPLX(0, k*x_ext(n-1)))
-        ELSE IF (E<0) THEN
-            psi_I(n) = EXP(-k*x_ext(n))
-            psi_I(n-1) = EXP(-k*x_ext(n-1))
-            DO 
-                IF (REAL(psi_I(n-l))>0) EXIT
-                l = l + 2
-                IF (l>n-3) EXIT
-                psi_I(n-l) = EXP(-k*x_ext(n-l))
-                psi_I(n-l-1) = EXP(-k*x_ext(n-l-1))
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - LCP(i))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-        END IF
-    
-        DEALLOCATE(k2)
-        DEALLOCATE(x_ext)
-        
-        n = SIZE(x)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_complex_matrix_LCP
-
-
-
-    ! Function to calculate the Wronskian of two complex functions.
-    FUNCTION wronskian(f, g, dx)
-        IMPLICIT NONE
-        COMPLEX(KIND=idk), INTENT(IN) :: f(:), g(:)
-        REAL(KIND=idk), INTENT(IN) :: dx
-        COMPLEX(KIND=idk) :: wronskian
-        INTEGER :: Npul
-        COMPLEX(KIND=idk) :: df, dg
-
-        Npul = CEILING(mp * R0/ABS(xmax-xmin))
-        df = (-f(Npul+2) + 8*f(Npul+1) - 8*f(Npul-1) + f(Npul-2)) / (12*dx)
-        dg = (-g(Npul+2) + 8*g(Npul+1) - 8*g(Npul-1) + g(Npul-2)) / (12*dx)
-        wronskian = dg*f(Npul) - df*g(Npul)
-        
-        IF (wronskian == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: Wronskian equal to zero')
-        END IF
-        IF (ISNAN(ABS(df))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-        IF (ISNAN(ABS(dg))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-        END IF
-    
-    END FUNCTION wronskian
-    
-    FUNCTION wronskian_16(f, g, dx)
-        IMPLICIT NONE
-        COMPLEX(KIND=16), INTENT(IN) :: f(:), g(:)
-        REAL(KIND=idk), INTENT(IN) :: dx
-        COMPLEX(KIND=16) :: wronskian_16
-        INTEGER :: Npul
-        COMPLEX(KIND=16) :: df, dg
-
-        Npul = CEILING(mp * R0/ABS(xmax-xmin))
-        df = (-f(Npul+2) + 8*f(Npul+1) - 8*f(Npul-1) + f(Npul-2)) / (12*dx)
-        dg = (-g(Npul+2) + 8*g(Npul+1) - 8*g(Npul-1) + g(Npul-2)) / (12*dx)
-        wronskian_16 = dg*f(Npul) - df*g(Npul)
-        
-        IF (wronskian_16 == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: Wronskian equal to zero')
-        END IF
-        IF (ISNAN(ABS(df))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-        IF (ISNAN(ABS(dg))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-        END IF
-    
-    END FUNCTION wronskian_16
-
-
-    FUNCTION wronskian_16_real(f, g, dx)
-        IMPLICIT NONE
-        REAL(KIND=16), INTENT(IN) :: f(:), g(:)
-        REAL(KIND=idk), INTENT(IN) :: dx
-        REAL(KIND=16) :: wronskian_16_real
-        INTEGER :: Npul
-        REAL(KIND=16) :: df, dg
-
-        Npul = CEILING(mp * R0/ABS(xmax-xmin))
-        df = (-f(Npul+2) + 8*f(Npul+1) - 8*f(Npul-1) + f(Npul-2)) / (12*dx)
-        dg = (-g(Npul+2) + 8*g(Npul+1) - 8*g(Npul-1) + g(Npul-2)) / (12*dx)
-        wronskian_16_real = dg*f(Npul) - df*g(Npul)
-        
-        IF (wronskian_16_real == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: Wronskian equal to zero')
-        END IF
-        IF (ISNAN(ABS(df))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-        IF (ISNAN(ABS(dg))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-        END IF
-    
-    END FUNCTION wronskian_16_real
-    
-    
-    
-    
-    
-    
-    
-! === Green in Coulomb ===
-    
-    SUBROUTINE apply_green_coulomb_real_vector(x, E, m, Z, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
-        REAL(KIND=idk), INTENT(IN) :: rightside(:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk) :: eta, w, wd
-        COMPLEX(KIND=idk) :: XX, ETA1
-        COMPLEX(KIND=idk), DIMENSION(1) :: FC, GC, FCP, GCP, SIG
-        INTEGER :: IFAIL, sf1, sf2
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        eta = -Z*m/(hbar**2*k)
-        ETA1 = CMPLX(eta,0.0d0,KIND=idk)
-        IFAIL = 0 
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            XX = CMPLX(k*x(n), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n) = GC(1)
-            XX = CMPLX(k*x(n-1), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n-1) = GC(1)
-        ELSE IF (E<0) THEN
-            DO 
-                IF (l>n-3) EXIT
-                CALL coulomb_whittaker(eta, 0, k*x(n-l), w, wd, sf1)
-                psi_I(n-l) = w 
-                CALL coulomb_whittaker(eta, 0, k*x(n-l-1), w, wd, sf2)
-                psi_I(n-l-1) = w * 10.0d0 ** (sf2-sf1)
-                IF (ABS(psi_I(n-l))>0) EXIT
-                l = l + 2
-            END DO
-        END IF
-     
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-         END IF
-         
-        IF (ISNAN(ABS(psi_I(1)))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-            PRINT*, E
-            PRINT*, psi_I(n-l)
-            PRINT*, psi_I(n-l-1)
-        END IF
-    
-        DEALLOCATE(k2)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
-        psi(:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_coulomb_real_vector
-    
-    
-    
-    
-    SUBROUTINE apply_green_coulomb_real_matrix(x, E, m, Z, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
-        REAL(KIND=idk), INTENT(IN) :: rightside(:,:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk) :: eta, w, wd
-        COMPLEX(KIND=idk) :: XX, ETA1
-        COMPLEX(KIND=idk), DIMENSION(1) :: FC, GC, FCP, GCP, SIG
-        INTEGER :: IFAIL, sf1, sf2
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        eta = -Z*m/(hbar**2*k)
-        ETA1 = CMPLX(eta,0.0d0,KIND=idk)
-        IFAIL = 0
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            XX = CMPLX(k*x(n), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n) = GC(1)
-            XX = CMPLX(k*x(n-1), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n-1) = GC(1)
-        ELSE IF (E<0) THEN
-            DO 
-                IF (l>n-3) EXIT
-                CALL coulomb_whittaker(eta, 0, k*x(n-l), w, wd, sf1)
-                psi_I(n-l) = w 
-                CALL coulomb_whittaker(eta, 0, k*x(n-l-1), w, wd, sf2)
-                psi_I(n-l-1) = w * 10.0d0 ** (sf2-sf1)
-                IF (ABS(psi_I(n-l))>0) EXIT
-                l = l + 2
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-         END IF
-         
-        IF (ISNAN(ABS(psi_I(1)))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-            PRINT*, E
-            PRINT*, psi_I(n-l)
-            PRINT*, psi_I(n-l-1)
-        END IF
-    
-        DEALLOCATE(k2)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_coulomb_real_matrix
-    
-    
-    
-    SUBROUTINE apply_green_coulomb_complex_matrix(x, E, m, Z, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
-        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:,:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
-        INTEGER :: n, i, j, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk) :: eta, w, wd
-        COMPLEX(KIND=idk) :: XX, ETA1
-        COMPLEX(KIND=idk), DIMENSION(1) :: FC, GC, FCP, GCP, SIG
-        INTEGER :: IFAIL, sf1, sf2
-
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        eta = -Z*m/(hbar**2*k)
-        ETA1 = CMPLX(eta,0.0d0,KIND=idk)
-        IFAIL = 0
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            XX = CMPLX(k*x(n), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n) = GC(1)
-            XX = CMPLX(k*x(n-1), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n-1) = GC(1)
-        ELSE IF (E<0) THEN
-            DO 
-                IF (l>n-3) EXIT
-                CALL coulomb_whittaker(eta, 0, k*x(n-l), w, wd, sf1)
-                psi_I(n-l) = w 
-                CALL coulomb_whittaker(eta, 0, k*x(n-l-1), w, wd, sf2)
-                psi_I(n-l-1) = w * 10.0d0 ** (sf2-sf1)
-                IF (ABS(psi_I(n-l))>0) EXIT
-                l = l + 2
-            END DO
-        END IF
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
-        END IF
-
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
-            CALL CONSOLE('[ERROR]: psi_I is 0')
-         END IF
-         
-        IF (ISNAN(ABS(psi_I(1)))) THEN
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-            PRINT*, E
-            PRINT*, psi_I(n-l)
-            PRINT*, psi_I(n-l-1)
-        END IF
-    
-        DEALLOCATE(k2)
-
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(ABS(wronski))) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        DO j = 1, SIZE(rightside,1)
-            yR = psi_R(1:n) * rightside(j,:) * 2*m/hbar**2
-            yI = psi_I(1:n) * rightside(j,:) * 2*m/hbar**2
-            CALL REVERSE(yI)
-            CALL primitive(yR, h, intR)
-            CALL primitive(yI, h, intI)
-            CALL REVERSE(intI)
-
-            psi(j,:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
-        END DO
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_coulomb_complex_matrix
-
-
-
-    SUBROUTINE apply_green_coulomb_bound_real_vector(x, E, m, Z, potential_green, rightside, psi)
-        IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
-        REAL(KIND=idk), INTENT(IN) :: rightside(:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        REAL(KIND=idk), INTENT(OUT) :: psi(:)
-        
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        REAL(KIND=16) :: wronski
-        REAL(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk) :: eta, w, wd
-        INTEGER :: IFAIL, sf1, sf2
-
         IF (E >= 0.0d0) THEN
-            CALL CONSOLE('[ERROR] apply_green_coulomb_bound_real_vector called with E >= 0')
+            k = SQRT(2.0d0 * m * E) / hbar
+            eta_real = -Z * m / (hbar**2 * k)         
+            zrho = CMPLX(k * x, 0.0d0, KIND=idk)
+            zeta = CMPLX(eta_real, 0.0d0, KIND=idk)
+            kfn = 0
+            ifail = 0        
+            CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+            val = gc(1)
+            
+        ELSE
+            kappa = SQRT(2.0d0 * m * ABS(E)) / hbar    
+            IF (ABS(Z) > 1.0d-10) THEN
+                eta_real = -Z * m / (hbar**2 * kappa) 
+                CALL coulomb_whittaker(eta_real, l, kappa * x, w_whit, wd_whit, sf_whit)
+                val = CMPLX(w_whit * (10.0d0**sf_whit), 0.0d0, KIND=idk)
+            ELSE
+                zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
+                zeta = (0.0d0, 0.0d0)
+                kfn = 0
+                ifail = 0
+                CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+                val = gc(1) * CMPLX(0.0d0, 1.0d0, KIND=idk)**(-l)              
+            END IF
+        END IF
+        
+    END FUNCTION general_asymptotic
+
+
+    FUNCTION analytic_asymptotic(x, E, m, Z, l, asymptotics) RESULT(val)
+        REAL(KIND=idk), INTENT(IN) :: x, E, m, Z
+        INTEGER, INTENT(IN) :: l, asymptotics
+        COMPLEX(KIND=idk) :: val
+        
+        REAL(KIND=idk) :: k, eta_real, kappa
+        COMPLEX(KIND=idk) :: zrho, zeta, zl_min
+        COMPLEX(KIND=idk) :: fc(1), gc(1), fcp(1), gcp(1), sig(1)
+        INTEGER :: ifail
+        INTEGER :: kfn, mode
+        
+        zl_min = CMPLX(l, 0.0d0, KIND=idk)
+        
+        
+        IF (E >= 0.0d0) THEN
+            mode = 12
+            k = SQRT(2.0d0 * m * E) / hbar
+            eta_real = -Z * m / (hbar**2 * k)         
+            zrho = CMPLX(k * x, 0.0d0, KIND=idk)
+            zeta = CMPLX(eta_real, 0.0d0, KIND=idk)
+            kfn = 0
+            ifail = 0        
+            CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+            val = gc(1)
+            
+        ELSE
+            IF (asymptotics == -1) THEN
+                mode = 22
+            ELSEIF (asymptotics == 1) THEN
+                mode = 12
+            ELSE
+                CALL CONSOLE('[ERROR]: Invalid asymptotics choice in analytic_asymptotic function')
+                val = 0.0d0
+                RETURN
+            END IF
+            kappa = SQRT(2.0d0 * m * ABS(E)) / hbar    
+            eta_real = -Z * m / (hbar**2 * kappa) 
+            zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
+            zeta = CMPLX(0.0d0, -eta_real, KIND=idk)
+            kfn = 0
+            ifail = 0
+            CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+            val = gc(1)           
+        END IF
+        
+    END FUNCTION analytic_asymptotic
+
+
+    FUNCTION general_free_solution(x, E, m, Z, l) RESULT(val)
+        REAL(KIND=idk), INTENT(IN) :: x, E, m, Z
+        INTEGER, INTENT(IN) :: l
+        REAL(KIND=idk) :: val
+
+        REAL(KIND=idk) :: k, eta, norm_factor
+        COMPLEX(KIND=idk) :: zrho, zeta, zl_min
+        COMPLEX(KIND=idk) :: fc(1), gc(1), fcp(1), gcp(1), sig(1)
+        INTEGER :: ifail, kfn, mode
+
+        IF (E < 0.0d0) THEN
+            CALL CONSOLE('[ERROR]: Energy must be positive for free solution')
+            val = 0.0d0
             RETURN
         END IF
 
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
-        
-        eta = -Z*m/(hbar**2*k)
-        IFAIL = 0
-        
+        k = SQRT(2.0d0 * m * E) / hbar
 
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        DO 
-            IF (l>n-3) EXIT
-            CALL coulomb_whittaker(eta, 0, k*x(n-l), w, wd, sf1) 
-            psi_I(n-l) = w 
-            CALL coulomb_whittaker(eta, 0, k*x(n-l-1), w, wd, sf2)
-            psi_I(n-l-1) = w * 10.0d0 ** (sf2-sf1)
-            IF (ABS(psi_I(n-l)) > 0.0d0) EXIT 
-            l = l + 2
-        END DO 
-        
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x(i)))
-        END DO
-
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        IF (ISNAN(psi_R(n))) THEN 
-            CALL CONSOLE('[ERROR]: psi_R is NaN')
+        IF (ABS(Z) > 1.0d-10) THEN
+            eta = -Z * m / (hbar**2 * k) 
+        ELSE
+            eta = 0.0d0
         END IF
 
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-         IF (ABS(psi_I(1)) == 0.0d0) THEN
-             CALL CONSOLE('[ERROR]: psi_I is 0')
-         END IF
-         
-        IF (ISNAN(psi_I(1))) THEN 
-            CALL CONSOLE('[ERROR]: psi_I is NaN')
-            PRINT*, E
-            PRINT*, psi_I(n-l)
-            PRINT*, psi_I(n-l-1)
-        END IF
-    
-        DEALLOCATE(k2)
+        zrho = CMPLX(k * x, 0.0d0, KIND=idk)
+        zeta = CMPLX(eta, 0.0d0, KIND=idk)
+        zl_min = CMPLX(l, 0.0d0, KIND=idk)
+        mode = 12
+        kfn = 0
+        ifail = 0
+
+        CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+
+        norm_factor = SQRT(2.0_idk * m / (pi * k * hbar**2))
+
+        val = REAL(fc(1), KIND=idk) * norm_factor
+
+    END FUNCTION general_free_solution
 
 
-        wronski = wronskian_16_real(psi_R, psi_I, h) 
-        IF (wronski == 0) THEN
-            CALL CONSOLE('[ERROR]: Wronski == 0')
-        END IF
-        IF (ISNAN(wronski)) THEN
-            CALL CONSOLE('[ERROR]: Wronski is NaN')
-        END IF
-    
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
-        CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
-        CALL REVERSE(intI)
 
-        psi(:) = REAL( (psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk )
 
-        DEALLOCATE(yR,yI,intR,intI, psi_R, psi_I)
-    
-    END SUBROUTINE apply_green_coulomb_bound_real_vector
-    
-    
-    
-    
-    
-    
-    SUBROUTINE apply_green_analytic_continuation(x, E, m, Z, potential_green, rightside, psi)
+
+
+    ! Functions to compute wronskians
+    FUNCTION wronskian_c(f, g, dx)
         IMPLICIT NONE
-        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
-        REAL(KIND=idk), INTENT(IN) :: rightside(:)
-        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
-        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
-        INTEGER :: n, i, l
-        REAL(KIND=idk) :: dx, k, h
-        COMPLEX(KIND=16) :: wronski
-        COMPLEX(KIND=16), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
-        REAL(KIND=idk), ALLOCATABLE :: k2(:)
-        REAL(KIND=idk) :: eta, w, wd
-        COMPLEX(KIND=idk) :: XX, ETA1
-        COMPLEX(KIND=idk), DIMENSION(1) :: FC, GC, FCP, GCP, SIG
-        INTEGER :: IFAIL, sf1, sf2
+        COMPLEX(KIND=qdk), INTENT(IN) :: f(:), g(:)
+        REAL(KIND=qdk), INTENT(IN) :: dx
+        COMPLEX(KIND=qdk) :: wronskian_c
+        INTEGER :: Nc
+        COMPLEX(KIND=qdk) :: df, dg
 
-        n = SIZE(x)
-        dx = ABS(x(2) - x(1))
-        k = SQRT(2*m*ABS(E))/hbar
-        h = dx
+        Nc = CEILING(mp * R0/ABS(xmax-xmin))
+        df = (-f(Nc+2) + 8*f(Nc+1) - 8*f(Nc-1) + f(Nc-2)) / (12*dx)
+        dg = (-g(Nc+2) + 8*g(Nc+1) - 8*g(Nc-1) + g(Nc-2)) / (12*dx)
+        wronskian_c = dg*f(Nc) - df*g(Nc)
         
-        eta = -Z*m/(hbar**2*k)
-        IFAIL = 0 
-
-        ALLOCATE(psi_R(n), psi_I(n))
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        IF (E >= 0) THEN
-            ETA1 = CMPLX(eta,0.0d0,KIND=idk)
-            XX = CMPLX(k*x(n), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n) = GC(1)
-            XX = CMPLX(k*x(n-1), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            psi_I(n-1) = GC(1)
-        ELSE IF (E<0) THEN
-            ETA1 = CMPLX(0,-eta,KIND=idk)
-            XX = CMPLX(0.0d0, k*x(n), KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 22, 0, IFAIL)
-            psi_I(n) = GC(1)
-            XX = CMPLX(0.0d0, k*x(n-1), KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 22, 0, IFAIL)
-            psi_I(n-1) = GC(1)
+        IF (wronskian_c == 0.0d0) THEN
+            CALL CONSOLE('[ERROR]: Wronskian equal to zero')
         END IF
-     
+        IF (ISNAN(ABS(df))) THEN
+            CALL CONSOLE('[ERROR]: psi_R is NaN')
+        END IF
+        IF (ISNAN(ABS(dg))) THEN
+            CALL CONSOLE('[ERROR]: psi_I is NaN')
+        END IF
+
+    END FUNCTION wronskian_c
+
+    FUNCTION wronskian_r(f, g, dx)
+        IMPLICIT NONE
+        REAL(KIND=qdk), INTENT(IN) :: f(:), g(:)
+        REAL(KIND=qdk), INTENT(IN) :: dx
+        REAL(KIND=qdk) :: wronskian_r
+        INTEGER :: Nc
+        REAL(KIND=qdk) :: df, dg
+
+        Nc = CEILING(mp * R0/ABS(xmax-xmin))
+        df = (-f(Nc+2) + 8*f(Nc+1) - 8*f(Nc-1) + f(Nc-2)) / (12*dx)
+        dg = (-g(Nc+2) + 8*g(Nc+1) - 8*g(Nc-1) + g(Nc-2)) / (12*dx)
+        wronskian_r = dg*f(Nc) - df*g(Nc)
         
-        ALLOCATE(k2(n))
-        DO i = 1, n
-            k2(i) = 2*m/hbar**2 * (E - potential_green(x(i)))
+        IF (wronskian_r == 0.0d0) THEN
+            CALL CONSOLE('[ERROR]: Wronskian equal to zero')
+        END IF
+        IF (ISNAN(ABS(df))) THEN
+            CALL CONSOLE('[ERROR]: psi_R is NaN')
+        END IF
+        IF (ISNAN(ABS(dg))) THEN
+            CALL CONSOLE('[ERROR]: psi_I is NaN')
+        END IF
+    
+    END FUNCTION wronskian_r
+
+
+
+
+
+
+
+    ! Subroutines to compute regular and irregular solutions of the homogeneous equation [E-T_N-V]|psi> = 0
+    SUBROUTINE compute_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=qdk), INTENT(OUT) :: psi_R(:), psi_I(:)
+
+        INTEGER :: N, i, j
+        REAL(KIND=qdk) :: dx
+        REAL(KIND=qdk), ALLOCATABLE :: k2(:)
+        COMPLEX(KIND=qdk) :: wronski
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        psi_R(1) = 0.0_qdk
+        psi_R(2) = dx ** (l+1)
+        j = 0
+        DO 
+            IF (j>N-3) EXIT
+            psi_I(N-j) = CMPLX(general_asymptotic(x(N-j), E, m, Z, l), KIND=qdk)
+            psi_I(N-j-1) = CMPLX(general_asymptotic(x(N-j-1), E, m, Z, l), KIND=qdk)
+            IF (ABS(psi_I(N-j))>0) EXIT
+            j = j + 2
         END DO
 
-        DO i = 2, n-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
+        ALLOCATE(k2(N))
+        DO i = 1, N
+            k2(i) = 2.0_qdk * REAL(m/hbar**2, KIND=qdk) * (REAL(E,kind=qdk) - potential_green(x(i)))
         END DO
-        
-        IF (ISNAN(ABS(psi_R(n)))) THEN
+
+        DO i = 2, N-1
+            psi_R(i+1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_R(i) - (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)*psi_R(i-1)) / (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)
+        END DO
+
+        IF (ISNAN(ABS(psi_R(N)))) THEN
             CALL CONSOLE('[ERROR]: psi_R is NaN')
         END IF
 
-        DO i = n-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
+        DO i = N-j-1, 2, -1
+            psi_I(i-1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_I(i) - (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)*psi_I(i+1)) / (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)
         END DO
-        
-         IF ((ABS(psi_I(1))) == 0.0d0) THEN
+
+        IF ((ABS(psi_I(1))) == 0.0_qdk) THEN
             CALL CONSOLE('[ERROR]: psi_I is 0')
          END IF
-         
+
         IF (ISNAN(ABS(psi_I(1)))) THEN
             CALL CONSOLE('[ERROR]: psi_I is NaN')
-            PRINT*, E
-            PRINT*, psi_I(n-l)
-            PRINT*, psi_I(n-l-1)
         END IF
-    
+
         DEALLOCATE(k2)
 
-        wronski = wronskian_16(psi_R, psi_I, h)
-        IF (wronski == 0) THEN
+        wronski = wronskian_c(psi_R, psi_I, dx)
+        IF (wronski == 0.0_qdk) THEN
             CALL CONSOLE('[ERROR]: Wronski == 0')
         END IF
         IF (ISNAN(ABS(wronski))) THEN
             CALL CONSOLE('[ERROR]: Wronski is NaN')
         END IF
+
+        psi_I = psi_I / wronski * 2.0_qdk * REAL(m/hbar**2, KIND = qdk)
+
+    END SUBROUTINE compute_homogeneous_solutions
+
+
+    SUBROUTINE compute_analytic_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=qdk), INTENT(OUT) :: psi_R(:), psi_I(:)
+
+        INTEGER :: N, i, j
+        REAL(KIND=qdk) :: dx
+        REAL(KIND=qdk), ALLOCATABLE :: k2(:)
+        COMPLEX(KIND=qdk) :: wronski
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        psi_R(1) = 0.0_qdk
+        psi_R(2) = dx ** (l+1)
+        j = 0
+        DO 
+            IF (j>N-3) EXIT
+            psi_I(N-j) = CMPLX(analytic_asymptotic(x(N-j), E, m, Z, l, -1), KIND=qdk)
+            psi_I(N-j-1) = CMPLX(analytic_asymptotic(x(N-j-1), E, m, Z, l, -1), KIND=qdk)
+            IF (ABS(psi_I(N-j))>0) EXIT
+            j = j + 2
+        END DO
+
+        ALLOCATE(k2(N))
+        DO i = 1, N
+            k2(i) = 2.0_qdk * REAL(m/hbar**2, KIND=qdk) * (REAL(E,kind=qdk) - potential_green(x(i)))
+        END DO
+
+        DO i = 2, N-1
+            psi_R(i+1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_R(i) - (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)*psi_R(i-1)) / (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)
+        END DO
+
+        IF (ISNAN(ABS(psi_R(N)))) THEN
+            CALL CONSOLE('[ERROR]: psi_R is NaN')
+        END IF
+
+        DO i = N-j-1, 2, -1
+            psi_I(i-1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_I(i) - (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)*psi_I(i+1)) / (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)
+        END DO
+
+        IF ((ABS(psi_I(1))) == 0.0_qdk) THEN
+            CALL CONSOLE('[ERROR]: psi_I is 0')
+         END IF
+
+        IF (ISNAN(ABS(psi_I(1)))) THEN
+            CALL CONSOLE('[ERROR]: psi_I is NaN')
+        END IF
+
+        DEALLOCATE(k2)
+
+        wronski = wronskian_c(psi_R, psi_I, dx)
+        IF (wronski == 0.0_qdk) THEN
+            CALL CONSOLE('[ERROR]: Wronski == 0')
+        END IF
+        IF (ISNAN(ABS(wronski))) THEN
+            CALL CONSOLE('[ERROR]: Wronski is NaN')
+        END IF
+
+        psi_I = psi_I / wronski * 2.0_qdk * REAL(m/hbar**2, KIND = qdk)
+
+    END SUBROUTINE compute_analytic_homogeneous_solutions
     
-        ALLOCATE(yR(n), yI(n), intR(n), intI(n))
-        yR = psi_R(1:n) * rightside * 2*m/hbar**2
-        yI = psi_I(1:n) * rightside * 2*m/hbar**2
+
+    SUBROUTINE compute_bound_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        REAL(KIND=qdk), INTENT(OUT) :: psi_R(:), psi_I(:)
+
+        INTEGER :: N, i, j
+        REAL(KIND=qdk) :: dx
+        REAL(KIND=qdk), ALLOCATABLE :: k2(:)
+        REAL(KIND=qdk) :: wronski
+
+        IF (E >= 0.0_qdk) THEN
+            CALL CONSOLE('[ERROR]: Energy must be negative for bound state solutions')
+            psi_R = 0.0_qdk
+            psi_I = 0.0_qdk
+            RETURN
+        END IF
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        psi_R(1) = 0.0_qdk
+        psi_R(2) = dx ** (l+1)
+        j = 0
+        DO 
+            IF (j>N-3) EXIT
+            psi_I(N-j) = REAL(general_asymptotic(x(N-j), E, m, Z, l), KIND=qdk)
+            psi_I(N-j-1) = REAL(general_asymptotic(x(N-j-1), E, m, Z, l), KIND=qdk)
+            IF (ABS(psi_I(N-j))>0) EXIT
+            j = j + 2
+        END DO
+
+        ALLOCATE(k2(N))
+        DO i = 1, N
+            k2(i) = 2.0_qdk * REAL(m/hbar**2, KIND=qdk) * (REAL(E,kind=qdk) - potential_green(x(i)))
+        END DO
+
+        DO i = 2, N-1
+            psi_R(i+1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_R(i) - (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)*psi_R(i-1)) / (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)
+        END DO
+
+        IF (ISNAN(ABS(psi_R(N)))) THEN
+            CALL CONSOLE('[ERROR]: psi_R is NaN')
+        END IF
+
+        DO i = N-j-1, 2, -1
+            psi_I(i-1) = (2.0_qdk*(1.0_qdk-5.0_qdk*dx**2*k2(i)/12.0_qdk)*psi_I(i) - (1.0_qdk+dx**2*k2(i+1)/12.0_qdk)*psi_I(i+1)) / (1.0_qdk+dx**2*k2(i-1)/12.0_qdk)
+        END DO
+
+        IF ((ABS(psi_I(1))) == 0.0_qdk) THEN
+            CALL CONSOLE('[ERROR]: psi_I is 0')
+         END IF
+
+        IF (ISNAN(ABS(psi_I(1)))) THEN
+            CALL CONSOLE('[ERROR]: psi_I is NaN')
+        END IF
+
+        DEALLOCATE(k2)
+
+        wronski = wronskian_r(psi_R, psi_I, dx)
+        IF (wronski == 0.0_qdk) THEN
+            CALL CONSOLE('[ERROR]: Wronski == 0')
+        END IF
+        IF (ISNAN(ABS(wronski))) THEN
+            CALL CONSOLE('[ERROR]: Wronski is NaN')
+        END IF
+
+        psi_I = psi_I / wronski * 2.0_qdk * REAL(m/hbar**2, KIND = qdk)
+
+    END SUBROUTINE compute_bound_homogeneous_solutions
+
+
+    ! Subroutine to apply the Green's function method to solve the previously mentioned differential equation.
+    ! |rightside> can be either a real/complex vector or a rectangular matrix (j,:), then the Green's function is applied on each j-th vector
+    SUBROUTINE apply_green_real_vector(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
+
+        INTEGER :: N, i
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        yR = psi_R * REAL(rightside, KIND=qdk) 
+        yI = psi_I * REAL(rightside, KIND=qdk) 
         CALL REVERSE(yI)
-        CALL primitive(yR, h, intR)
-        CALL primitive(yI, h, intI)
+        CALL primitive(yR, dx, intR)
+        CALL primitive(yI, dx, intI)
         CALL REVERSE(intI)
-        psi(:) = CMPLX((psi_I(1:n)*intR + psi_R(1:n)*intI) / wronski, KIND=idk)
+        DEALLOCATE(yR,yI)
 
-        DEALLOCATE(yR,yI,intR,intI,psi_I,psi_R)
-    
-    END SUBROUTINE apply_green_analytic_continuation
-    
-    
+        psi = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
 
+        DEALLOCATE(intR,intI,psi_I,psi_R)
+
+    END SUBROUTINE apply_green_real_vector
+
+
+    SUBROUTINE apply_green_complex_vector(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
+
+        INTEGER :: N, i
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        yR = psi_R * CMPLX(rightside, KIND=qdk) 
+        yI = psi_I * CMPLX(rightside, KIND=qdk) 
+        CALL REVERSE(yI)
+        CALL primitive(yR, dx, intR)
+        CALL primitive(yI, dx, intI)
+        CALL REVERSE(intI)
+        DEALLOCATE(yR,yI)
+
+        psi = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+
+        DEALLOCATE(intR,intI,psi_I,psi_R)
+
+    END SUBROUTINE apply_green_complex_vector
+
+
+    SUBROUTINE apply_green_real_matrix(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:,:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
+
+        INTEGER :: N, i, Nrightside
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        Nrightside = SIZE(rightside,1)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        DO i = 1, Nrightside
+            yR = psi_R * REAL(rightside(i,:), KIND=qdk) 
+            yI = psi_I * REAL(rightside(i,:), KIND=qdk) 
+            CALL REVERSE(yI)
+            CALL primitive(yR, dx, intR)
+            CALL primitive(yI, dx, intI)
+            CALL REVERSE(intI)
+            psi(i,:) = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+        END DO
+
+        DEALLOCATE(intR,intI,psi_I,psi_R,yR,yI)
+
+    END SUBROUTINE apply_green_real_matrix
+
+
+    SUBROUTINE apply_green_complex_matrix(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:,:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
+
+        INTEGER :: N, i, Nrightside
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        Nrightside = SIZE(rightside,1)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        DO i = 1, Nrightside
+            yR = psi_R * CMPLX(rightside(i,:), KIND=qdk) 
+            yI = psi_I * CMPLX(rightside(i,:), KIND=qdk) 
+            CALL REVERSE(yI)
+            CALL primitive(yR, dx, intR)
+            CALL primitive(yI, dx, intI)
+            CALL REVERSE(intI)
+            psi(i,:) = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+        END DO
+
+        DEALLOCATE(intR,intI,psi_I,psi_R,yR,yI)
+
+    END SUBROUTINE apply_green_complex_matrix
+
+
+
+
+    ! Subroutine to apply the Green's function method to solve the previously mentioned differential equation with ANALYTIC continuation of the irregular solution.
+    ! |rightside> can be either a real/complex vector or a rectangular matrix (j,:), then the Green's function is applied on each j-th vector
+    SUBROUTINE apply_green_analytic_real_vector(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
+
+        INTEGER :: N, i
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_analytic_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        yR = psi_R * REAL(rightside, KIND=qdk) 
+        yI = psi_I * REAL(rightside, KIND=qdk) 
+        CALL REVERSE(yI)
+        CALL primitive(yR, dx, intR)
+        CALL primitive(yI, dx, intI)
+        CALL REVERSE(intI)
+        DEALLOCATE(yR,yI)
+
+        psi = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+
+        DEALLOCATE(intR,intI,psi_I,psi_R)
+
+    END SUBROUTINE apply_green_analytic_real_vector
+
+
+    SUBROUTINE apply_green_analytic_complex_vector(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:)
+
+        INTEGER :: N, i
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_analytic_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        yR = psi_R * CMPLX(rightside, KIND=qdk) 
+        yI = psi_I * CMPLX(rightside, KIND=qdk) 
+        CALL REVERSE(yI)
+        CALL primitive(yR, dx, intR)
+        CALL primitive(yI, dx, intI)
+        CALL REVERSE(intI)
+        DEALLOCATE(yR,yI)
+
+        psi = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+
+        DEALLOCATE(intR,intI,psi_I,psi_R)
+
+    END SUBROUTINE apply_green_analytic_complex_vector
+
+
+    SUBROUTINE apply_green_analytic_real_matrix(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:,:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
+
+        INTEGER :: N, i, Nrightside
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        Nrightside = SIZE(rightside,1)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_analytic_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        DO i = 1, Nrightside
+            yR = psi_R * REAL(rightside(i,:), KIND=qdk) 
+            yI = psi_I * REAL(rightside(i,:), KIND=qdk) 
+            CALL REVERSE(yI)
+            CALL primitive(yR, dx, intR)
+            CALL primitive(yI, dx, intI)
+            CALL REVERSE(intI)
+            psi(i,:) = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+        END DO
+
+        DEALLOCATE(intR,intI,psi_I,psi_R,yR,yI)
+
+    END SUBROUTINE apply_green_analytic_real_matrix
+
+
+    SUBROUTINE apply_green_analytic_complex_matrix(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z
+        COMPLEX(KIND=idk), INTENT(IN) :: rightside(:,:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        COMPLEX(KIND=idk), INTENT(OUT) :: psi(:,:)
+
+        INTEGER :: N, i, Nrightside
+        REAL(KIND=qdk) :: dx
+        COMPLEX(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        N = SIZE(x)
+        Nrightside = SIZE(rightside,1)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_analytic_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        DO i = 1, Nrightside
+            yR = psi_R * CMPLX(rightside(i,:), KIND=qdk) 
+            yI = psi_I * CMPLX(rightside(i,:), KIND=qdk) 
+            CALL REVERSE(yI)
+            CALL primitive(yR, dx, intR)
+            CALL primitive(yI, dx, intI)
+            CALL REVERSE(intI)
+            psi(i,:) = CMPLX((psi_I*intR + psi_R*intI), KIND=idk)
+        END DO
+
+        DEALLOCATE(intR,intI,psi_I,psi_R,yR,yI)
+
+    END SUBROUTINE apply_green_analytic_complex_matrix
+
+
+
+
+    ! Subroutine to apply the Green's function method to solve the previously mentioned differential equation for E<0 with only REAL solutions.
+    ! |rightside> can be either a real/complex vector or a rectangular matrix (j,:), then the Green's function is applied on each j-th vector
+    SUBROUTINE apply_green_coulomb_bound_real_vector(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        REAL(KIND=idk), INTENT(OUT) :: psi(:)
+
+        INTEGER :: N, i
+        REAL(KIND=qdk) :: dx
+        REAL(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        IF (E >= 0.0_idk) THEN
+            CALL CONSOLE('[ERROR]: Energy must be negative for bound state solutions')
+            psi = 0.0_idk
+            RETURN
+        END IF
+
+        N = SIZE(x)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_bound_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        yR = psi_R * REAL(rightside, KIND=qdk) 
+        yI = psi_I * REAL(rightside, KIND=qdk) 
+        CALL REVERSE(yI)
+        CALL primitive(yR, dx, intR)
+        CALL primitive(yI, dx, intI)
+        CALL REVERSE(intI)
+        DEALLOCATE(yR,yI)
+
+        psi = REAL((psi_I*intR + psi_R*intI), KIND=idk)
+
+        DEALLOCATE(intR,intI,psi_I,psi_R)
+
+    END SUBROUTINE apply_green_coulomb_bound_real_vector
+
+
+
+    SUBROUTINE apply_green_coulomb_bound_real_matrix(x, E, m, Z, l, potential_green, rightside, psi)
+        IMPLICIT NONE
+        REAL(KIND=idk), INTENT(IN) :: x(:), E, m, Z, rightside(:,:)
+        INTEGER, INTENT(IN) :: l
+        PROCEDURE(potential_green_interface), POINTER, INTENT(IN) :: potential_green
+        REAL(KIND=idk), INTENT(OUT) :: psi(:,:)
+
+        INTEGER :: N, i, Nrightside
+        REAL(KIND=qdk) :: dx
+        REAL(KIND=qdk), DIMENSION(:), ALLOCATABLE :: psi_R, psi_I, yR, yI, intR, intI
+
+        IF (E >= 0.0_idk) THEN
+            CALL CONSOLE('[ERROR]: Energy must be negative for bound state solutions')
+            psi = 0.0_idk
+            RETURN
+        END IF
+
+        N = SIZE(x)
+        Nrightside = SIZE(rightside,1)
+        dx = REAL(ABS(x(2) - x(1)), KIND=qdk)
+
+        ALLOCATE(psi_R(N), psi_I(N))
+
+        call compute_bound_homogeneous_solutions(x, E, m, Z, l, potential_green, psi_R, psi_I)
+
+        ALLOCATE(yR(N), yI(N), intR(N), intI(N))
+
+        DO i = 1, Nrightside
+            yR = psi_R * REAL(rightside(i,:), KIND=qdk) 
+            yI = psi_I * REAL(rightside(i,:), KIND=qdk) 
+            CALL REVERSE(yI)
+            CALL primitive(yR, dx, intR)
+            CALL primitive(yI, dx, intI)
+            CALL REVERSE(intI)
+            psi(i,:) = REAL((psi_I*intR + psi_R*intI), KIND=idk)
+        END DO
+
+        DEALLOCATE(intR,intI,psi_I,psi_R,yR,yI)
+
+    END SUBROUTINE apply_green_coulomb_bound_real_matrix
+
+    
 END MODULE Green
-
-
-

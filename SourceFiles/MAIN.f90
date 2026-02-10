@@ -144,7 +144,7 @@ PROGRAM MAIN
         DO i = 1, Nfull
             WRITE(iounit, '(1E20.12)', advance='no') xext(i)
             WRITE(iounit, '(1E20.12)', advance='no') dstate(i)
-            WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(xext(i)) + Z /(xext(i)+Creg) ) * phys_h0
+            WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(xext(i)) + Z /xext(i) ) * phys_h0
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
@@ -212,7 +212,7 @@ PROGRAM MAIN
             XX = CMPLX(k * xext(i), 0.0d0, KIND=idk)
             CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
             freestate(i) = FC(1) * SQRT(2*m/(pi*k*hbar**2))
-            moddedfreestate(i) = freestate(i) * (V_ptr(xext(i)) + Z /(xext(i)+Creg) )
+            moddedfreestate(i) = freestate(i) * (V_ptr(xext(i)) + Z /xext(i) )
         END DO
         
         
@@ -960,7 +960,7 @@ PROGRAM MAIN
             WRITE(iounit, '(1E20.12)', advance='no') x(i)
             DO j = 1, nv
                 V_A = V_params(j)
-                WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(x(i))+Z/(x(i)+Creg)) * phys_h0
+                WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(x(i))+Z/x(i)) * phys_h0
             END DO
             WRITE(iounit,*)
         END DO
@@ -1379,7 +1379,7 @@ PROGRAM MAIN
         REAL(KIND = idk), INTENT(IN) :: R
         REAL(KIND = idk) :: sR
         sR = 1.0d0 / ( 1.0d0 + EXP( (4.0d0-2.0d0*V_A) * (R- 2.35d0-1.15d0*V_A) ) )
-        V_coulomb2 = ( 0.5d0 * R**2 - 1.5d0 + V_A ) * sR - (1.0 - sR) * Z / (R + Creg)
+        V_coulomb2 = ( 0.5d0 * R**2 - 1.5d0 + V_A ) * sR - (1.0 - sR) * Z / R
     END FUNCTION V_coulomb2
 
 
