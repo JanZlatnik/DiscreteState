@@ -17,7 +17,7 @@ MODULE DiscreteState
     USE, INTRINSIC :: ieee_arithmetic
     IMPLICIT NONE
     PRIVATE
-    PUBLIC ::compute_DS, unwrap_phaseshift, compute_DSenergy
+    PUBLIC :: compute_DS, unwrap_phaseshift, compute_DSenergy
 
     INTEGER, PARAMETER :: xpick = 20, xn = 10
 
@@ -35,12 +35,12 @@ MODULE DiscreteState
     
     
     ! Subroutine to compute discrete state properties (Delta, Gamma, phase shift) for a given potential and discrete state wavefunction
-    SUBROUTINE compute_DS(x, E, mass, Z, l, potential, dstate, Delta, Gamma2, phaseshift, DS_phaseshift, Vde)
+    SUBROUTINE compute_DS(x, E, mass, Z, l, potential, dstate, Delta, Gamma2, DeltaA, Gamma2A, phaseshift, DS_phaseshift, Vde)
         USE OMP_LIB
         REAL(KIND = idk), INTENT(IN) :: x(:), E(:), mass, dstate(:), Z
         INTEGER, INTENT(IN) :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN) :: potential
-        REAL(KIND = idk), ALLOCATABLE, INTENT(OUT) :: Delta(:), Gamma2(:), phaseshift(:), DS_phaseshift(:), Vde(:)
+        REAL(KIND = idk), ALLOCATABLE, INTENT(OUT) :: Delta(:), Gamma2(:), DeltaA(:), Gamma2A(:), phaseshift(:), DS_phaseshift(:), Vde(:)
         
         INTEGER :: i, j, N
         COMPLEX(KIND = idk), ALLOCATABLE :: green_dstate(:), scattered_state(:), greened_mat(:,:)
@@ -52,12 +52,16 @@ MODULE DiscreteState
         N = SIZE(x)
   
         ALLOCATE(Delta(SIZE(E)))
+        ALLOCATE(DeltaA(SIZE(E)))
         ALLOCATE(Gamma2(SIZE(E)))
+        ALLOCATE(Gamma2A(SIZE(E)))
         ALLOCATE(phaseshift(SIZE(E)))
         ALLOCATE(DS_phaseshift(SIZE(E)))
         ALLOCATE(Vde(SIZE(E)))
         Delta = 0.0d0
+        DeltaA = 0.0d0
         Gamma2 = 0.0d0
+        Gamma2A = 0.0d0
         phaseshift = 0.0d0
         DS_phaseshift = 0.0d0
         Vde = 0.0d0
@@ -65,7 +69,7 @@ MODULE DiscreteState
         !$OMP PARALLEL DO &
         !$OMP PRIVATE(j, i, hamdot, greendot, scattdot, &
         !$OMP     ham_dstate, green_dstate, mat, greened_mat, freestate, scattered_state) &
-        !$OMP SHARED(x, dstate, E, mass, Z, dx, Delta, Gamma2, phaseshift, DS_phaseshift, Vde, N) &
+        !$OMP SHARED(x, dstate, E, mass, Z, dx, Delta, Gamma2, DeltaA, Gamma2A, phaseshift, DS_phaseshift, Vde, N) &
         !$OMP SCHEDULE(DYNAMIC)
         DO j = 1, SIZE(E)
 
@@ -123,12 +127,11 @@ MODULE DiscreteState
                 end do
                 call definite_integral(green_dstate, dx, greendot)
                 greendot = 1.0d0 / greendot
-                deallocate(green_dstate)
                 delta(j) = e(j) - hamdot - real(greendot)
                 gamma2(j) = 2.0d0 * aimag(greendot)
                 vde(j) = sqrt(abs(gamma2(j)) / (2.0d0 * pi))
 
-                if (abs(Z) > 1.0d-10) then
+                if (abs(Z) > 1.0d-10 .AND. e(j)>cutoff_energy(l)) then
                     call compute_analytic_defect(x, e(j), mass, Z, l, potential, phaseshift(j))
                     call apply_green_analytic(x, e(j), mass, Z, l, potential, dstate, green_dstate)
                     do i = 1, N
@@ -138,11 +141,15 @@ MODULE DiscreteState
                     deallocate(green_dstate)
                     greendot = 1.0d0 / greendot
                     ds_phaseshift(j) = atan2(aimag(greendot),real(greendot))
+                    deltaA(j) = e(j) - hamdot - real(greendot)
+                    gamma2A(j) = -2.0d0 * aimag(greendot)
 
                 else
                     deallocate(green_dstate)
                     phaseshift(j) = ieee_value(0.0d0, ieee_quiet_nan)
                     ds_phaseshift(j) = ieee_value(0.0d0, ieee_quiet_nan)
+                    deltaA(j) = ieee_value(0.0d0, ieee_quiet_nan)
+                    gamma2A(j) = ieee_value(0.0d0, ieee_quiet_nan)
                 end if
                 
 
@@ -170,7 +177,7 @@ MODULE DiscreteState
 
       COMPLEX(KIND = idk) :: M11, M12, M21, M22, R1, R2
       COMPLEX(KIND = idk) :: A_in, A_out, b_minus, b_plus, S
-      INTEGER :: N, i0, i1, i
+      INTEGER :: N, i0, i1, i, sf
 
       N  = SIZE(psi)
       i0 = MAX(1, N - xpick - xn)
@@ -181,7 +188,7 @@ MODULE DiscreteState
       R1  = (0.0d0,0.0d0); R2  = (0.0d0,0.0d0)
 
       DO i = i0, i1
-         b_plus  = general_asymptotic(x(i), e, m, Z, l)
+         b_plus  = general_asymptotic(x(i), e, m, Z, l, sf)
          b_minus = CONJG(b_plus)
 
          M11 = M11 + CONJG(b_minus)*b_minus

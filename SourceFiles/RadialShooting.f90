@@ -28,8 +28,9 @@ MODULE RadialShooting
     
     CONTAINS
     
-    SUBROUTINE compute_wavefunction(x, E, m, potential, psi)
+    SUBROUTINE compute_wavefunction(x, E, m, l, potential, psi)
         REAL(KIND = idk), INTENT(IN)                            :: x(:), E, m
+        INTEGER, INTENT(IN)                                     :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN)     :: potential
         REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)              :: psi(:)
         
@@ -44,11 +45,11 @@ MODULE RadialShooting
         h = ABS(x(2)-x(1))
         
         DO i = 1, N
-            k2(i) = 2*m/hbar**2 * (E - potential(x(i)))
+            k2(i) = 2.0d0*m/hbar**2 * (E - potential(x(i)))
         END DO
         
         psi(1) = 0.0d0
-        psi(2) = h
+        psi(2) = h**(l+1)
         DO i = 2, N-1
             psi(i+1) = (2.0d0*(1.0d0-5.0d0*h**2*k2(i)/12.0d0)*psi(i) - (1.0d0+h**2*k2(i-1)/12.0d0)*psi(i-1)) / (1.0d0+h**2*k2(i+1)/12.0d0)
         END DO
@@ -58,8 +59,9 @@ MODULE RadialShooting
     END SUBROUTINE compute_wavefunction
     
     
-    SUBROUTINE compute_logder_diff(x, E, m, potential, Z, logderdiff)
+    SUBROUTINE compute_logder_diff(x, E, m, l, potential, Z, logderdiff)
         REAL(KIND = idk), INTENT(IN)                            :: x(:), E, m, Z
+        INTEGER, INTENT(IN)                                     :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN)     :: potential
         REAL(KIND = idk), INTENT(OUT)                           :: logderdiff
         
@@ -69,12 +71,12 @@ MODULE RadialShooting
         REAL(KIND = idk), ALLOCATABLE :: psi(:)
         
         N = SIZE(x)
-        k = SQRT(2*m*ABS(E))/hbar
+        k = SQRT(2.0d0*m*ABS(E))/hbar
         h = ABS(x(2)-x(1))
         eta = -Z*m/(hbar**2*k)
 
-        CALL compute_wavefunction(x, E, m, potential, psi)
-        CALL coulomb_whittaker(eta, 0, k*x(N-1), w, wd, sf)
+        CALL compute_wavefunction(x, E, m, l, potential, psi)
+        CALL coulomb_whittaker(eta, l, k*x(N-1), w, wd, sf)
 
         logderdiff = ((psi(N) - psi(N-2)) / (2.0d0*h) * w - ( k * wd) * psi(N-1)) *10.0d0 ** sf
 
@@ -85,8 +87,9 @@ MODULE RadialShooting
     
     
     
-    SUBROUTINE compute_normalized_wavefunction(x, E, mass, potential, Z, psi)
+    SUBROUTINE compute_normalized_wavefunction(x, E, mass, l, potential, Z, psi)
         REAL(KIND = idk), INTENT(IN)                        :: x(:), E, mass, Z
+        INTEGER, INTENT(IN)                                 :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN) :: potential
         REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)          :: psi(:)
         
@@ -106,7 +109,7 @@ MODULE RadialShooting
         dx = ABS(x(2)-x(1))
         Ngrid = SIZE(x)
         
-        CALL compute_wavefunction(x, E, mass, potential, psi)
+        CALL compute_wavefunction(x, E, mass, l, potential, psi)
         
         ALLOCATE(normstate(Ngrid))
         DO i = 1, Ngrid
@@ -118,7 +121,7 @@ MODULE RadialShooting
         k_num = SQRT(2.0d0*m*ABS(E)) / hbar
         eta = - Z * m / (hbar**2 * k_num)
         R_match = x(Ngrid)
-        CALL coulomb_whittaker(eta, 0, k_num*R_match, w_match, w_deriv, sf_match)
+        CALL coulomb_whittaker(eta, l, k_num*R_match, w_match, w_deriv, sf_match)
         A_scale_sq = (psi(Ngrid) / w_match) ** 2
         
         R_turn = Z / ABS(E)
@@ -129,7 +132,7 @@ MODULE RadialShooting
         DO WHILE (.NOT. tail_converged)
             
             r_curr = r_curr + dx
-            CALL coulomb_whittaker(eta, 0, k_num*r_curr, w_curr, w_deriv, sf_curr)
+            CALL coulomb_whittaker(eta, l, k_num*r_curr, w_curr, w_deriv, sf_curr)
             term = w_curr ** 2 * (10.0d0) ** (2*(sf_curr-sf_match))
             norm_tail = norm_tail + term
             
@@ -155,8 +158,9 @@ MODULE RadialShooting
         
 
      
-    SUBROUTINE ComputeBoundStates(x, e_test, m, potential, Z, Ntotal, Nstartgrid, eigE, eigFunc, Nfound, logderdiffs, defects)
+    SUBROUTINE ComputeBoundStates(x, e_test, m, potential, Z, l, Ntotal, Nstartgrid, eigE, eigFunc, Nfound, logderdiffs, defects)
         REAL(KIND = idk), INTENT(IN)                            :: x(:), e_test(:), m, Z
+        INTEGER, INTENT(IN)                                     :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN)     :: potential
         INTEGER, INTENT(IN)                                     :: Ntotal, Nstartgrid
         REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)              :: eigE(:), eigFunc(:,:), logderdiffs(:), defects(:)
@@ -212,7 +216,7 @@ MODULE RadialShooting
         
         !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i) SCHEDULE(DYNAMIC, 1) 
         DO i = 1, Ne
-            CALL compute_logder_diff(x, e_test(i), m, potential, Z, logderdiffs(i))
+            CALL compute_logder_diff(x, e_test(i), m, l, potential, Z, logderdiffs(i))
         END DO
         !$OMP END PARALLEL DO
         
@@ -262,7 +266,7 @@ MODULE RadialShooting
             
             DO j = 1, max_iter
                 Emid = 0.5d0 * (Eleft + Eright)
-                CALL compute_logder_diff(x, Emid, m, potential, Z, fmid)
+                CALL compute_logder_diff(x, Emid, m, l, potential, Z, fmid)
                 
                 IF (fleft * fmid <= 0.0d0) THEN
                     Eright = Emid
@@ -276,7 +280,7 @@ MODULE RadialShooting
             eigE(k) = 0.5d0 * (Eleft + Eright)
             defects(k) = REAL(k, idk) - SQRT(0.5d0/ABS(eigE(k)))
         
-            CALL compute_normalized_wavefunction(x, eigE(k), m, potential, Z, psi_local)
+            CALL compute_normalized_wavefunction(x, eigE(k), m, l, potential, Z, psi_local)
             
             eigFunc(:, k) = psi_local(:) 
             DEALLOCATE(psi_local)
@@ -335,7 +339,7 @@ MODULE RadialShooting
                         eigE(j) = E1
                         defects(j) = mu_conv
                     
-                        CALL compute_normalized_wavefunction(x, E1, m, potential, Z, psi_local)
+                        CALL compute_normalized_wavefunction(x, E1, m, l, potential, Z, psi_local)
                         eigFunc(:, j) = psi_local(:)
                         DEALLOCATE(psi_local)
                     END DO
@@ -355,8 +359,8 @@ MODULE RadialShooting
             Eleft = MIN(E1, E2)
             Eright = MAX(E1, E2)
         
-            CALL compute_logder_diff(x, Eleft, m, potential, Z, fleft)
-            CALL compute_logder_diff(x, Eright, m, potential, Z, fright)
+            CALL compute_logder_diff(x, Eleft, m, l, potential, Z, fleft)
+            CALL compute_logder_diff(x, Eright, m, l, potential, Z, fright)
         
             IF (fleft * fright > 0.0d0) THEN
                 WRITE(message, '(A,I0,A)') '[WARNING]: 200% mu_diff bracket failed for n = ', i, '. Widening to 500%.'
@@ -366,8 +370,8 @@ MODULE RadialShooting
                 E1 = -0.5d0 / (REAL(i, idk) - mu_low)**2; E2 = -0.5d0 / (REAL(i, idk) - mu_high)**2
                 Eleft = MIN(E1, E2); Eright = MAX(E1, E2)
             
-                CALL compute_logder_diff(x, Eleft, m, potential, Z, fleft)
-                CALL compute_logder_diff(x, Eright, m, potential, Z, fright)
+                CALL compute_logder_diff(x, Eleft, m, l, potential, Z, fleft)
+                CALL compute_logder_diff(x, Eright, m, l, potential, Z, fright)
 
                 IF (fleft * fright > 0.0d0) THEN
                     WRITE(message, '(A,I0,A)') '[WARNING]: 500% mu_diff bracket failed for n = ', i, '. Widening to 1000%.'
@@ -377,8 +381,8 @@ MODULE RadialShooting
                     E1 = -0.5d0 / (REAL(i, idk) - mu_low)**2; E2 = -0.5d0 / (REAL(i, idk) - mu_high)**2
                     Eleft = MIN(E1, E2); Eright = MAX(E1, E2)
                 
-                    CALL compute_logder_diff(x, Eleft, m, potential, Z, fleft)
-                    CALL compute_logder_diff(x, Eright, m, potential, Z, fright)
+                    CALL compute_logder_diff(x, Eleft, m, l, potential, Z, fleft)
+                    CALL compute_logder_diff(x, Eright, m, l, potential, Z, fright)
 
                     IF (fleft * fright > 0.0d0) THEN
                         WRITE(message, '(A,I0,A)') 'Error: Cannot bracket root for n = ', i, '. Stopping.'
@@ -391,7 +395,7 @@ MODULE RadialShooting
         
             DO j = 1, max_iter2
                 Emid = 0.5d0 * (Eleft + Eright)
-                CALL compute_logder_diff(x, Emid, m, potential, Z, fmid)
+                CALL compute_logder_diff(x, Emid, m, l, potential, Z, fmid)
                 IF (fleft * fmid <= 0.0d0) THEN
                     Eright = Emid; fright = fmid
                 ELSE
@@ -401,7 +405,7 @@ MODULE RadialShooting
             eigE(i) = 0.5d0 * (Eleft + Eright)
         
             defects(i) = REAL(i, idk) - SQRT(0.5d0/ABS(eigE(i)))
-            CALL compute_normalized_wavefunction(x, eigE(i), m, potential, Z, psi_local)
+            CALL compute_normalized_wavefunction(x, eigE(i), m, l, potential, Z, psi_local)
             eigFunc(:, i) = psi_local(:)
             DEALLOCATE(psi_local)
         

@@ -30,8 +30,9 @@ MODULE PHPBound
     
     CONTAINS
     
-    SUBROUTINE ComputePHPBoundStates(x, dstate, e_test, m, potential, Z, Ntotal, Nstart, eigE, eigFunc, Nfound, overlaps, defects)
+    SUBROUTINE ComputePHPBoundStates(x, dstate, e_test, m, potential, Z, l, Ntotal, Nstart, eigE, eigFunc, Nfound, overlaps, defects)
         REAL(KIND = idk), INTENT(IN)                            :: x(:), dstate(:), e_test(:), m, Z
+        INTEGER, INTENT(IN)                                     :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN)     :: potential
         INTEGER, INTENT(IN)                                     :: Ntotal, Nstart
         REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)              :: eigE(:), eigFunc(:,:), overlaps(:), defects(:)
@@ -102,7 +103,7 @@ MODULE PHPBound
         
         !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i) SCHEDULE(DYNAMIC, 1) 
         DO i = 1, Ne
-            CALL compute_overlap(x, Ndstate, dstate, e_test(i), m, potential, Z, overlaps(i))
+            CALL compute_overlap(x, Ndstate, dstate, e_test(i), m, l, potential, Z, overlaps(i))
         END DO
         !$OMP END PARALLEL DO
         
@@ -146,7 +147,7 @@ MODULE PHPBound
             ALLOCATE(floc(npts_check), Eloc(npts_check))
             DO j = 1, npts_check
                 Eloc(j) = Eleft + (Eright - Eleft) * (REAL(j-1, idk) / REAL(npts_check-1, idk))
-                CALL compute_overlap(x, Ndstate, dstate, Eloc(j), m, potential, Z, floc(j))
+                CALL compute_overlap(x, Ndstate, dstate, Eloc(j), m, l, potential, Z, floc(j))
             END DO
             
             mean_abs = SUM(ABS(floc)) / REAL(npts_check, idk)
@@ -213,7 +214,7 @@ MODULE PHPBound
             
             DO j = 1, max_iter
                 Emid = 0.5d0 * (Eleft + Eright)
-                CALL compute_overlap(x, Ndstate, dstate, Emid, m, potential, Z, fmid)
+                CALL compute_overlap(x, Ndstate, dstate, Emid, m, l, potential, Z, fmid)
                 
                 IF (fleft * fmid <= 0.0d0) THEN
                     Eright = Emid
@@ -227,7 +228,7 @@ MODULE PHPBound
             eigE(k) = 0.5d0 * (Eleft + Eright)
             defects(k) = REAL(k, idk) - SQRT(0.5d0/ABS(eigE(k)))
         
-            CALL compute_normalized_states(x, dstate, eigE(k), m, potential, Z, psi_local)
+            CALL compute_normalized_states(x, dstate, eigE(k), m, l, potential, Z, psi_local)
             
             eigFunc(:, k) = psi_local(:) 
             DEALLOCATE(psi_local)
@@ -264,7 +265,7 @@ MODULE PHPBound
         
         DO j = 1, max_iter
             Emid = 0.5d0 * (Eleft + Eright)
-            CALL compute_overlap(x, Ndstate, dstate, Emid, m, potential, Z, fmid)
+            CALL compute_overlap(x, Ndstate, dstate, Emid, m, l, potential, Z, fmid)
             IF (fleft * fmid <= 0.0d0) THEN
                 Eright = Emid; fright = fmid
             ELSE
@@ -321,7 +322,7 @@ MODULE PHPBound
                         eigE(j) = E1
                         defects(j) = mu_conv
                     
-                        CALL compute_normalized_states(x, dstate, E1, m, potential, Z, psi_local)
+                        CALL compute_normalized_states(x, dstate, E1, m, l, potential, Z, psi_local)
                         eigFunc(:, j) = psi_local(:)
                         DEALLOCATE(psi_local)
                     END DO
@@ -342,8 +343,8 @@ MODULE PHPBound
             Eleft = MIN(E1, E2)
             Eright = MAX(E1, E2)
         
-            CALL compute_overlap(x, Ndstate, dstate, Eleft, m, potential, Z, fleft)
-            CALL compute_overlap(x, Ndstate, dstate, Eright, m, potential, Z, fright)
+            CALL compute_overlap(x, Ndstate, dstate, Eleft, m, l, potential, Z, fleft)
+            CALL compute_overlap(x, Ndstate, dstate, Eright, m, l, potential, Z, fright)
         
             IF (fleft * fright > 0.0d0) THEN
                 WRITE(message, '(A,I0,A)') '[WARNING]: 5% defect bracket failed for n = ', i, '. Widening to 50%.'
@@ -353,8 +354,8 @@ MODULE PHPBound
                 E1 = -0.5d0 / (REAL(i, idk) - mu_low)**2; E2 = -0.5d0 / (REAL(i, idk) - mu_high)**2
                 Eleft = MIN(E1, E2); Eright = MAX(E1, E2)
             
-                CALL compute_overlap(x, Ndstate, dstate, Eleft, m, potential, Z, fleft)
-                CALL compute_overlap(x, Ndstate, dstate, Eright, m, potential, Z, fright)
+                CALL compute_overlap(x, Ndstate, dstate, Eleft, m, l, potential, Z, fleft)
+                CALL compute_overlap(x, Ndstate, dstate, Eright, m, l, potential, Z, fright)
 
                 IF (fleft * fright > 0.0d0) THEN
                      WRITE(message, '(A,I0,A)') 'Error: Cannot bracket root for n = ', i, '. Stopping.'
@@ -366,7 +367,7 @@ MODULE PHPBound
         
             DO j = 1, max_iter2
                 Emid = 0.5d0 * (Eleft + Eright)
-                CALL compute_overlap(x, Ndstate, dstate, Emid, m, potential, Z, fmid)
+                CALL compute_overlap(x, Ndstate, dstate, Emid, m, l, potential, Z, fmid)
                 IF (fleft * fmid <= 0.0d0) THEN
                     Eright = Emid; fright = fmid
                 ELSE
@@ -376,7 +377,7 @@ MODULE PHPBound
             eigE(i) = 0.5d0 * (Eleft + Eright)
         
             defects(i) = REAL(i, idk) - SQRT(0.5d0/ABS(eigE(i)))
-            CALL compute_normalized_states(x, dstate, eigE(i), m, potential, Z, psi_local)
+            CALL compute_normalized_states(x, dstate, eigE(i), m, l, potential, Z, psi_local)
             eigFunc(:, i) = psi_local(:)
             DEALLOCATE(psi_local)
         
@@ -393,8 +394,9 @@ MODULE PHPBound
     END SUBROUTINE ComputePHPBoundStates
     
     
-    SUBROUTINE compute_overlap(x, Ndstate, dstate, E, m, potential, Z, overlap)
+    SUBROUTINE compute_overlap(x, Ndstate, dstate, E, m, l, potential, Z, overlap)
         REAL(KIND = idk), INTENT(IN)                        :: x(:), dstate(:), E, m, Z
+        INTEGER, INTENT(IN)                                 :: l
         INTEGER, INTENT(IN)                                 :: Ndstate
         PROCEDURE(potential_interface), POINTER, INTENT(IN) :: potential
         REAL(KIND = idk), INTENT(OUT)                       :: overlap
@@ -408,7 +410,7 @@ MODULE PHPBound
         dx = ABS(x(2)-x(1))
         
         ALLOCATE(gdstate(SIZE(x)))
-        CALL apply_green_coulomb_bound(x, E, m, Z, potential, dstate, gdstate)
+        CALL apply_green_coulomb_bound(x, E, m, Z, l, potential, dstate, gdstate)
         
         Nmin = MIN(Ndstate,SIZE(x))
         ALLOCATE(overlapstate(Nmin))
@@ -425,8 +427,9 @@ MODULE PHPBound
     
     
     
-    SUBROUTINE compute_normalized_states(x, dstate, E, mass, potential, Z, psi)
+    SUBROUTINE compute_normalized_states(x, dstate, E, mass, l, potential, Z, psi)
         REAL(KIND = idk), INTENT(IN)                        :: x(:), dstate(:), E, mass, Z
+        INTEGER, INTENT(IN)                                 :: l
         PROCEDURE(potential_interface), POINTER, INTENT(IN) :: potential
         REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)          :: psi(:)
         
@@ -438,17 +441,17 @@ MODULE PHPBound
         
         REAL(KIND = idk) :: k_num, eta, R_match, w_match, w_deriv
         INTEGER          :: sf_match, sf_curr, Ngrid
-        REAL(KIND = idk) :: A_scale_sq, r_curr, w_curr, term, term_prev
-        REAL(KIND = idk) :: R_turn
+        REAL(KIND = idk) :: A_scale_sq, r_curr, w_curr, term, term_prev, dr_adaptive
+        REAL(KIND = idk) :: R_turn, E_kin_local, V_coulomb, local_k
         LOGICAL          :: tail_converged
         
-        REAL(KIND = idk), PARAMETER         :: eps = 1.0d-50
+        REAL(KIND = idk), PARAMETER         :: eps = 1.0d-25
         
         dx = ABS(x(2)-x(1))
         Ngrid = SIZE(x)
         
         ALLOCATE(gdstate(Ngrid))
-        CALL apply_green_coulomb_bound(x, E, mass, Z, potential, dstate, gdstate)
+        CALL apply_green_coulomb_bound(x, E, mass, Z, l, potential, dstate, gdstate)
         
         ALLOCATE(normstate(Ngrid))
         DO i = 1, Ngrid
@@ -460,26 +463,47 @@ MODULE PHPBound
         k_num = SQRT(2.0d0*m*ABS(E)) / hbar
         eta = - Z * m / (hbar**2 * k_num)
         R_match = x(Ngrid)
-        CALL coulomb_whittaker(eta, 0, k_num*R_match, w_match, w_deriv, sf_match)
+        CALL coulomb_whittaker(eta, l, k_num*R_match, w_match, w_deriv, sf_match)
         A_scale_sq = (gdstate(Ngrid) / w_match) ** 2
         
         R_turn = Z / ABS(E)
-        norm_tail = 0.5d0 * w_match ** 2
+        norm_tail = 0.0d0
         r_curr = R_match
         tail_converged = .FALSE.
+        term_prev = w_match ** 2
+        dr_adaptive = dx
         
         DO WHILE (.NOT. tail_converged)
-            
-            r_curr = r_curr + dx
-            CALL coulomb_whittaker(eta, 0, k_num*r_curr, w_curr, w_deriv, sf_curr)
+
+            V_coulomb = - Z / r_curr
+            E_kin_local = E - V_coulomb
+
+            IF (E_kin_local > 0.0d0) THEN
+                local_k = SQRT(2.0d0 * mass * E_kin_local) / hbar
+                IF(local_k > 1.0d-10) THEN
+                    dr_adaptive = 2.0d0 * PI / local_k / 25.0d0
+                ELSE
+                    dr_adaptive = dr_adaptive * 1.1d0
+                END IF
+            ELSE
+                dr_adaptive = dr_adaptive * 1.05d0
+            END IF
+                
+            dr_adaptive = MAX(dr_adaptive, dx)
+            r_curr = r_curr + dr_adaptive
+
+            CALL coulomb_whittaker(eta, l, k_num*r_curr, w_curr, w_deriv, sf_curr)
             term = w_curr ** 2 * (10.0d0) ** (2*(sf_curr-sf_match))
-            norm_tail = norm_tail + term
+            norm_tail = norm_tail + 0.5d0 * (term + term_prev) * dr_adaptive
+            term_prev = term
             
-            IF (r_curr > 2.0d0 * R_turn .AND. term < eps ) THEN 
-                tail_converged = .TRUE.
+            IF (r_curr > MAX(R_turn, R_match) ) THEN 
+                IF (term < eps * norm_tail) THEN
+                    tail_converged = .TRUE.
+                END IF
             END IF
             
-            IF (r_curr > 20.0d0 * MAX(R_turn, R_match)) THEN
+            IF (r_curr > 100.0d0 * MAX(R_turn, R_match)) THEN
                 WRITE(message, '(A,F0.8,A)') '[WARNING]: Normalization failed to converge for PHP state at En = ', E*phys_h0, ' eV.'
                 CALL CONSOLE(message)
                 EXIT

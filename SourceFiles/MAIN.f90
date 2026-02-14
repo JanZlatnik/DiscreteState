@@ -19,10 +19,10 @@ PROGRAM MAIN
 
     IMPLICIT NONE
     REAL(KIND = idk), ALLOCATABLE :: x(:), e(:), V_params(:)
-    REAL(KIND = idk), ALLOCATABLE :: Delta(:), Gamma2(:), Phaseshift(:), DS_phaseshift(:), Vde(:)
-    REAL(KIND = idk), ALLOCATABLE :: DeltaFull(:,:), Gamma2Full(:,:), PhaseshiftFull(:,:), DS_phaseshiftFull(:,:), VdeFull(:,:)
+    REAL(KIND = idk), ALLOCATABLE :: Delta(:), Gamma2(:), DeltaA(:), Gamma2A(:), Phaseshift(:), DS_phaseshift(:), Vde(:)
+    REAL(KIND = idk), ALLOCATABLE :: DeltaFull(:,:), Gamma2Full(:,:), DeltaAFull(:,:), Gamma2AFull(:,:), PhaseshiftFull(:,:), DS_phaseshiftFull(:,:), VdeFull(:,:)
     REAL(KIND = idk), ALLOCATABLE :: DeltaContinuous(:), DeltaContinuousFull(:,:), DeltaRydbergFull(:,:), DeltaRydberg(:)
-    REAL(KIND = idk), ALLOCATABLE :: dstate(:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:)
+    REAL(KIND = idk), ALLOCATABLE :: dstate(:,:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:)
     REAL(KIND = idk), ALLOCATABLE :: boundEgrid(:), eigEFull(:,:), defects(:,:), logdevsFull(:,:), overlapsFull(:,:), eigE(:), eigFunc(:,:), logdevs(:), DSenergies(:), overlaps(:), VdnFull(:,:), Vdn(:), defect(:)
     COMPLEX(KIND = idk), ALLOCATABLE :: cmplxscatstate(:)
     INTEGER :: status, iounit, i, j, Negrid, Nfound, jj, Nfull, l
@@ -35,7 +35,7 @@ PROGRAM MAIN
     CHARACTER(LEN=200) :: filename
     INTEGER :: istat
 
-    REAL(KIND = idk)                    :: V_A = 1.0d0!-0.15d0
+    REAL(KIND = idk)                    :: V_A = 1.0d0
     
     ! Interface for R->R function
     ABSTRACT INTERFACE
@@ -45,7 +45,10 @@ PROGRAM MAIN
         END FUNCTION real_function_interface
     END INTERFACE 
 
-    PROCEDURE(real_function_interface), POINTER :: V_ptr, dstateptr
+    PROCEDURE(real_function_interface), POINTER :: V_ptr, dstate_ptr
+
+    V_ptr => V_2D
+    dstate_ptr => dstate2D
     
     
     print*, '=============================================================='
@@ -80,367 +83,30 @@ PROGRAM MAIN
         CALL CONSOLE('Directory "DATA" already exists.')
     END IF
     
-    !=================================================================================
-    !                                    Tests
-    !=================================================================================
-    IF (test) THEN
-        INQUIRE(DIRECTORY="DATA/Test", EXIST=status)
-        IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/Test")
-            CALL CONSOLE('Subdirectory "Test" created successfully.')
-        ELSE
-            CALL CONSOLE('Subdirectory "Test" already exists.')
-        END IF
-        CALL CONSOLE('Testing Coulomb functions ...')
-        
-        V_ptr => V_coulomb2
-        dstateptr => dstate1
-        
-        ETA1 = cmplx(-1.0d0 / SQRT(2.0d0*e_test), 0.0d0, KIND=idk)  
-        eta = REAL(ETA1)
-        ZLMIN = cmplx(0.0d0, 0.0d0, KIND=idk)
-        NL    = 1
-        MODE1 = 12    ! 11 for computing derivatives
-        KFN   = 0
-        IFAIL = 0
-        
-        
-        
-        !! === 
-        !CALL coulomb_whittaker(eta, 0, SQRT(2.0d0*e_test)*x(SIZE(x)), w, wd, sf)
-        !PRINT*, w
-        !PRINT*, sf
-        !CALL CONSOLE('Press ENTER to exit...')
-        !READ(*,*)
-        !STOP
-        !
-        !
-        !! ===
-        !
-        
-        
-        
-        x_cut = MAX((turnplus+1.0d0)*Z/e_test, xmax)
-        Nfull = CEILING( (x_cut - x(1)) / dx ) + 1
-        
-        ALLOCATE(xext(Nfull))
-        ALLOCATE(dstate(Nfull))
-        
-        xext(1) = x(1)
-        DO i = 1, Nfull-1
-            xext(i+1) = xext(i) + dx
-        END DO
-
-        
-        DO i = 1, Nfull
-            dstate(i) = dstateptr(xext(i))
-        END DO
-        norm = SUM( ABS(dstate)**2 ) * dx
-        dstate = dstate / SQRT(norm)
-
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/dstate.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') dstate(i)
-            WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(xext(i)) + Z /xext(i) ) * phys_h0
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/dstate.txt')
-        
-        CALL CONSOLE('Testing Coulomb H+ function...')
-
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/coulomb_Hplus.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21, A21, A21)') '#', 'R [au]','Re(H+)','Im(H+)'
-        
-        DO i = 1, Nfull
-            XX = cmplx(SQRT(2.0d0*e_test)*xext(i), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, ZLMIN, NL, FC, GC, FCP, GCP, SIG, MODE1, KFN, IFAIL)
-            WRITE(iounit,'(3E20.12)') xext(i), REAL(GC(1)), AIMAG(GC(1))
-        END DO
-        
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/coulomb_Hplus.txt')
-        
-        CALL CONSOLE('Testing Whittaker W function...')
-        
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/coulomb_whittakerW.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21, A21, A21)') '#', 'R [au]','W'
-        
-        ALLOCATE(wvalues(Nfull))
-        ALLOCATE(wdvalues(Nfull))
-        DO i = 1, Nfull
-            CALL coulomb_whittaker(eta, 0, SQRT(2.0d0*e_test)*xext(i), w, wd, sf)
-            wvalues(i) = w * 10.0d0**sf
-            wdvalues(i) = wd * 10.0d0**sf
-        END DO
-
-        DO i = 1, Nfull
-            WRITE(iounit,'(1E20.12)', advance='no') xext(i)
-            WRITE(iounit,'(1E20.12)', advance='no') wvalues(i)
-            WRITE(iounit,'(1E20.12)', advance='no') SQRT(2.0d0*e_test) * wdvalues(i)
-            IF (i>1 .AND. i<Nfull) THEN
-                WRITE(iounit,'(1E20.12)', advance='no') (wvalues(i+1) - wvalues(i-1)) / (2.0d0*dx)
-            ELSE
-                WRITE(iounit,'(1E20.12)', advance='no') ieee_value(0.0d0, ieee_quiet_nan)
-            END IF
-            WRITE(iounit,*)
-        END DO
-
-        DEALLOCATE(wvalues, wdvalues)
-        
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/coulomb_whittakerW.txt')
-        
-        CALL CONSOLE('Testing Coulomb Green function for positive energies...')
-        
-        
-        k = SQRT(2.0d0*m*e_test)/hbar
-        ETA1 = CMPLX(- Z * m / (hbar**2 * k), 0.0d0, KIND=idk)      
-        
-
-        ALLOCATE(freestate(Nfull))
-        ALLOCATE(moddedfreestate(Nfull))
-        freestate = 0.0d0
-        
-        DO i = 1, Nfull
-            IFAIL = 0
-            XX = CMPLX(k * xext(i), 0.0d0, KIND=idk)
-            CALL COULCC(XX, ETA1, (0.0d0,0.0d0), 1, FC, GC, FCP, GCP, SIG, 12, 0, IFAIL)
-            freestate(i) = FC(1) * SQRT(2*m/(pi*k*hbar**2))
-            moddedfreestate(i) = freestate(i) * (V_ptr(xext(i)) + Z /xext(i) )
-        END DO
-        
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/freestate+.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') freestate(i)
-            WRITE(iounit, '(1E20.12)', advance='no') moddedfreestate(i)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/freestate+.txt')
-        
-        
-        ALLOCATE(cmplxscatstate(Nfull))
-        CALL apply_green_coulomb(xext, e_test, m, Z, V_ptr, moddedfreestate, cmplxscatstate)
-        cmplxscatstate = cmplxscatstate + freestate
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/scatstate+full.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') REAL(cmplxscatstate(i))
-            WRITE(iounit, '(1E20.12)', advance='no') AIMAG(cmplxscatstate(i))
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/scatstate+full.txt')   
-        
-        
-        DEALLOCATE(cmplxscatstate)
-        ALLOCATE(cmplxscatstate(mp))
-        CALL apply_green_coulomb(xext(1:mp), e_test, m, Z, V_ptr, moddedfreestate(1:mp), cmplxscatstate)
-        cmplxscatstate = cmplxscatstate + freestate(1:mp)
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/scatstate+short.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, mp
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') REAL(cmplxscatstate(i))
-            WRITE(iounit, '(1E20.12)', advance='no') AIMAG(cmplxscatstate(i))
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/scatstate+short.txt')   
-        
-        
-        DEALLOCATE(cmplxscatstate,freestate,moddedfreestate)
-        
-        CALL CONSOLE('Testing Coulomb Green function for negative energies...')
-        
-        
-        ALLOCATE(realscatstate(Nfull))
-        CALL apply_green_coulomb_bound(xext, -e_test, m, Z, V_ptr, dstate, realscatstate)
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/gdstatefull.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') realscatstate(i)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/gdstatefull.txt')   
-        
-        
-        DEALLOCATE(realscatstate)
-        ALLOCATE(realscatstate(mp))
-        CALL apply_green_coulomb_bound(xext(1:mp), -e_test, m, Z, V_ptr, dstate(1:mp), realscatstate)
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/gdstateshort.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, mp
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') realscatstate(i)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/gdstateshort.txt')   
-        
-        CALL coulomb_whittaker(eta, 0, SQRT(2.0d0*e_test)*xext(mp), w, wd, sfscale)
-        Ascale = realscatstate(mp) / w
-        
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/gdstateext.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = mp+1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            CALL coulomb_whittaker(eta, 0, SQRT(2.0d0*e_test)*xext(i), w, wd, sf)
-            WRITE(iounit, '(1E20.12)', advance='no') w * Ascale * 10.0d0 ** (sf-sfscale)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/gdstateext.txt')
-        
-        
-        DEALLOCATE(realscatstate)
-        
-        CALL CONSOLE('Testing regular & irregular solutions for negative energies...')
-        
-        ALLOCATE(k2(Nfull))
-        DO i = 1, Nfull
-            k2(i) = 2*m/hbar**2 * (-e_test - V_ptr(xext(i)))
-        END DO
-        
-        ALLOCATE(psi_R(Nfull), psi_I(Nfull))
-        h = dx
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        DO 
-            IF (l>Nfull-3) EXIT
-            CALL coulomb_whittaker(eta, 0, k*xext(Nfull-l), w, wd, sf) 
-            psi_I(Nfull-l) = w 
-            CALL coulomb_whittaker(eta, 0, k*xext(Nfull-l-1), w, wd, sf)
-            psi_I(Nfull-l-1) = w
-            IF (ABS(psi_I(Nfull-l)) > 0.0d0) EXIT 
-            l = l + 2
-        END DO
-        PRINT*, l
-        
-        DO i = 2, Nfull-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        DO i = Nfull-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-        wronski = wronskian_16_real(REAL(psi_R, KIND=16),REAL(psi_I, KIND=16),dx)
-        psi_R = psi_R * 2*m/hbar**2 / wronski
-        psi_I = psi_I * 2*m/hbar**2 / wronski
-        
-        
-                
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/psifull.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, Nfull
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') psi_R(i)
-            WRITE(iounit, '(1E20.12)', advance='no') psi_I(i)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/psufull.txt') 
-        
-        DEALLOCATE(psi_R,psi_I)
-        
-        ALLOCATE(psi_R(mp), psi_I(mp))
-        h = dx
-        psi_R(1) = 0
-        psi_R(2) = h
-        l = 0
-        DO 
-            IF (l>mp-3) EXIT
-            CALL coulomb_whittaker(eta, 0, k*xext(mp-l), w, wd, sf) 
-            psi_I(mp-l) = w 
-            CALL coulomb_whittaker(eta, 0, k*xext(mp-l-1), w, wd, sf)
-            psi_I(mp-l-1) = w 
-            IF (ABS(psi_I(mp-l)) > 0.0d0) EXIT 
-            l = l + 2
-        END DO
-        PRINT*, l
-        
-        DO i = 2, mp-1
-            psi_R(i+1) = (2*(1-5*h**2*k2(i)/12)*psi_R(i) - (1+h**2*k2(i-1)/12)*psi_R(i-1)) / (1+h**2*k2(i+1)/12)
-        END DO
-        
-        DO i = mp-l-1, 2, -1
-            psi_I(i-1) = (2*(1-5*h**2*k2(i)/12)*psi_I(i) - (1+h**2*k2(i+1)/12)*psi_I(i+1)) / (1+h**2*k2(i-1)/12)
-        END DO
-        
-        wronski = wronskian_16_real(REAL(psi_R, KIND=16),REAL(psi_I, KIND=16),dx)
-        psi_R = psi_R * 2*m/hbar**2 / wronski
-        psi_I = psi_I * 2*m/hbar**2 / wronski
-                
-        OPEN(NEWUNIT=iounit, FILE='DATA/Test/psishort.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, mp
-            WRITE(iounit, '(1E20.12)', advance='no') xext(i)
-            WRITE(iounit, '(1E20.12)', advance='no') psi_R(i) 
-            WRITE(iounit, '(1E20.12)', advance='no') psi_I(i) 
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Test/psishort.txt') 
-        
-        DEALLOCATE(psi_R,psi_I)
-        
-        
-        
-        DEALLOCATE(xext, dstate, k2)
-        
-    END IF
-    
     
     !=================================================================================
-    !                     Bound states in Coulomb-like potential
+    !                     Rydberg states in Coulomb-like potential
     !=================================================================================
-    IF (boundstates) THEN
-        INQUIRE(DIRECTORY="DATA/BoundStates", EXIST=status)
+    IF (Rydbergstates) THEN
+    IF (ABS(Z) > 1.0d-10) THEN
+        INQUIRE(DIRECTORY="DATA/RydbergStates", EXIST=status)
         IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/BoundStates")
-            CALL CONSOLE('Subdirectory "BoundStates" created successfully.')
+            CALL SYSTEM("mkdir -p DATA/RydbergStates")
+            CALL CONSOLE('Subdirectory "RydbergStates" created successfully.')
         ELSE
-            CALL CONSOLE('Subdirectory "BoundStates" already exists.')
+            CALL CONSOLE('Subdirectory "RydbergStates" already exists.')
         END IF
         
-        INQUIRE(DIRECTORY="DATA/BoundStates/Eigenfunctions", EXIST=status)
+        INQUIRE(DIRECTORY="DATA/RydbergStates/Eigenfunctions", EXIST=status)
         IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/BoundStates/Eigenfunctions")
+            CALL SYSTEM("mkdir -p DATA/RydbergStates/Eigenfunctions")
             CALL CONSOLE('Subdirectory "Eigenfunctions" created successfully.')
         ELSE
             CALL CONSOLE('Subdirectory "Eigenfunctions" already exists.')
         END IF
         
-        V_ptr => V_2D
-        
         ! Printing V(x) to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/BoundStates/V.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/V.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(x)
@@ -452,7 +118,7 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/BoundStates/V.txt')
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/V.txt')
         
         
         
@@ -475,7 +141,7 @@ PROGRAM MAIN
             IF (ALLOCATED(logdevs)) DEALLOCATE(logdevs)
             IF (ALLOCATED(defect)) DEALLOCATE(defect)
             
-            CALL ComputeBoundStates(x, boundEgrid, m, V_ptr, Z, Nbound, Nstart, eigE, eigFunc, Nfound, logdevs, defect)    
+            CALL ComputeBoundStates(x, boundEgrid, m, V_ptr, Z, l_ang, Nbound, Nstart, eigE, eigFunc, Nfound, logdevs, defect)    
             
             eigEFull(j,:) = eigE
             defects(j,:) = defect
@@ -483,7 +149,7 @@ PROGRAM MAIN
             
             ! Printing eigenfunctions
             WRITE(filename, '(F0.3)') V_A
-            filename = 'DATA/BoundStates/Eigenfunctions/eigFunc_VA_' // TRIM(ADJUSTL(filename)) // '.txt'
+            filename = 'DATA/RydbergStates/Eigenfunctions/eigFunc_VA_' // TRIM(ADJUSTL(filename)) // '.txt'
             OPEN(NEWUNIT=iounit, FILE=filename, STATUS='replace', ACTION='write')
             WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'R [au]','|psi_n>'
             WRITE(iounit,*)
@@ -507,7 +173,7 @@ PROGRAM MAIN
         
         
         ! Printing log-derivatives on test grid
-        OPEN(NEWUNIT=iounit, FILE='DATA/BoundStates/logderivs.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/logderivs.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','d/dr log(u) [1/Bohr]'
         WRITE(iounit,*)
         DO i = 1, Negrid
@@ -519,10 +185,10 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/BoundStates/logderivs.txt')
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/logderivs.txt')
         
         ! Printing eigenenergies
-        OPEN(NEWUNIT=iounit, FILE='DATA/BoundStates/eigE.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
         WRITE(iounit,*)
         DO i = 1, Nfound
@@ -533,11 +199,11 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/BoundStates/eigE.txt')
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/eigE.txt')
         
         
         ! Printing defects
-        OPEN(NEWUNIT=iounit, FILE='DATA/BoundStates/defects.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/defects.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
         WRITE(iounit,*)
         DO i = 1, Nfound
@@ -548,7 +214,7 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/BoundStates/defects.txt')        
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/defects.txt')        
         
         
         IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
@@ -556,56 +222,61 @@ PROGRAM MAIN
         IF (ALLOCATED(logdevsFull)) DEALLOCATE(logdevsFull)
         
         
-        
+    ELSE
+        CALL CONSOLE('[ERROR]: Z is zero or very close to zero. Skipping Rydberg state computation.') 
+    END IF   
     END IF
     
     
     !=================================================================================
-    !                PHP Bound states in Coulomb-like potential
+    !                PHP Rydberg states in Coulomb-like potential
     !=================================================================================
-    IF (PHPstates) THEN
-        INQUIRE(DIRECTORY="DATA/PHPStates", EXIST=status)
+    IF (PHPRydbergstates) THEN
+    IF (ABS(Z) > 1.0d-10) THEN
+        INQUIRE(DIRECTORY="DATA/PHPRydbergStates", EXIST=status)
         IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/PHPStates")
-            CALL CONSOLE('Subdirectory "PHPStates" created successfully.')
+            CALL SYSTEM("mkdir -p DATA/PHPRydbergStates")
+            CALL CONSOLE('Subdirectory "PHPRydbergStates" created successfully.')
         ELSE
-            CALL CONSOLE('Subdirectory "PHPStates" already exists.')
+            CALL CONSOLE('Subdirectory "PHPRydbergStates" already exists.')
         END IF
         
-        INQUIRE(DIRECTORY="DATA/PHPStates/Eigenfunctions", EXIST=status)
+        INQUIRE(DIRECTORY="DATA/PHPRydbergStates/Eigenfunctions", EXIST=status)
         IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/PHPStates/Eigenfunctions")
+            CALL SYSTEM("mkdir -p DATA/PHPRydbergStates/Eigenfunctions")
             CALL CONSOLE('Subdirectory "Eigenfunctions" created successfully.')
         ELSE
             CALL CONSOLE('Subdirectory "Eigenfunctions" already exists.')
         END IF
         
-        V_ptr => V_2D
-        dstateptr => dstate2D
-        
         ! Creating initial discrete state
         IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
-        ALLOCATE(dstate(SIZE(x)))
-        DO i = 1, SIZE(x)
-            dstate(i) = dstateptr(x(i))
+        ALLOCATE(dstate(nv,SIZE(x)))
+        DO j = 1, nv
+            V_A = V_params(j)
+            DO i = 1, SIZE(x)
+                dstate(j,i) = dstate_ptr(x(i))
+            END DO
+        norm = SUM( ABS(dstate(j,:))**2 ) * dx
+        dstate(j,:) = dstate(j,:) / SQRT(norm)
         END DO
-        norm = SUM( ABS(dstate)**2 ) * dx
-        dstate = dstate / SQRT(norm)
         CALL CONSOLE('Initial discrete state created successfully.')
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/dstate.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/dstate.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
         WRITE(iounit,*)
         DO i = 1, SIZE(x)
             WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            WRITE(iounit, '(1E20.12)', advance='no') dstate(i)
+            DO j = 1, nv
+                WRITE(iounit, '(1E20.12)', advance='no') dstate(j,i)
+            END DO
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/dstate.txt')
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/dstate.txt')
         
         ! Printing V(x) to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/V.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/V.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(x)
@@ -617,7 +288,7 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/V.txt')
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/V.txt')
         
         
         
@@ -635,6 +306,8 @@ PROGRAM MAIN
             V_A = V_params(j)
             WRITE(message, '(A,F0.3,A)') 'Computing in short-range potential with V_A = ', V_A, ' ...'
             CALL CONSOLE(message)
+
+            
             
             IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
             IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
@@ -642,7 +315,7 @@ PROGRAM MAIN
             IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
             IF (ALLOCATED(defect)) DEALLOCATE(defect)
             
-            CALL ComputePHPBoundStates(x, dstate, boundEgrid, m, V_ptr, Z, Nbound, Nstart, eigE, eigFunc, Nfound, overlaps, defect)
+            CALL ComputePHPBoundStates(x, dstate(j,:), boundEgrid, m, V_ptr, Z, l_ang, Nbound, Nstart, eigE, eigFunc, Nfound, overlaps, defect)
             
             eigEFull(j,:) = eigE
             overlapsFull(j,:) = overlaps
@@ -652,7 +325,7 @@ PROGRAM MAIN
             
             ! Printing eigenfunctions
             WRITE(filename, '(F0.3)') V_A
-            filename = 'DATA/PHPStates/Eigenfunctions/eigFunc_VA_' // TRIM(ADJUSTL(filename)) // '.txt'
+            filename = 'DATA/PHPRydbergStates/Eigenfunctions/eigFunc_VA_' // TRIM(ADJUSTL(filename)) // '.txt'
             OPEN(NEWUNIT=iounit, FILE=filename, STATUS='replace', ACTION='write')
             WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'R [au]','|psi_n>'
             WRITE(iounit,*)
@@ -669,7 +342,7 @@ PROGRAM MAIN
             IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
             
             ALLOCATE(Vdn(Nbound))
-            CALL ComputeVdn(x, dstate, m, V_ptr, eigFunc, Vdn)
+            CALL ComputeVdn(x, dstate(j,:), m, V_ptr, eigFunc, Vdn)
             VdnFull(j,:) = Vdn
     
             IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
@@ -681,7 +354,7 @@ PROGRAM MAIN
         
         
         ! Printing log-derivatives on test grid
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/overlaps.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/overlaps.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','d/dr log(u) [1/Bohr]'
         WRITE(iounit,*)
         DO i = 1, Negrid
@@ -693,10 +366,10 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/overlaps.txt')
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/overlaps.txt')
         
         ! Printing eigenenergies
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/eigE.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
         WRITE(iounit,*)
         DO i = 1, Nbound
@@ -707,10 +380,10 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/eigE.txt')
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/eigE.txt')
         
         ! Printing Vdn
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/Vdn.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n', 'Vdn [sqrt(eV)]'
         WRITE(iounit,*)
         DO i = 1, Nbound
@@ -721,10 +394,10 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/Vdn.txt')
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/Vdn.txt')
         
         ! Printing defects
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/defects.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/defects.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
         WRITE(iounit,*)
         DO i = 1, Nfound
@@ -735,16 +408,16 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPStates/defects.txt')  
+        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/defects.txt')  
         
         
         ! Saving Vdn and eigE to bin files for later use
         CALL CONSOLE('Caching eigEFull and VdnFull to binary files...')
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/eigE.bin', &
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')
         WRITE(iounit) eigEFull
         CLOSE(iounit)
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/Vdn.bin', &
+        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')
         WRITE(iounit) VdnFull
         CLOSE(iounit)
@@ -759,29 +432,29 @@ PROGRAM MAIN
         IF (ALLOCATED(defects)) DEALLOCATE(defects)
         
         
-        
+    ELSE
+        CALL CONSOLE('[ERROR]: Z is zero or very close to zero. Skipping PHP Rydberg state computation.')    
+    END IF
     END IF
     
     
     
+    
     !=================================================================================
-    !            Discrete state computation for Short Range Potential
+    !                           Discrete state computation
     !=================================================================================
-    IF (NO_coulomb_computation) THEN
-        INQUIRE(DIRECTORY="DATA/ShortRange", EXIST=status)
+    IF (dstate_computation) THEN
+        INQUIRE(DIRECTORY="DATA/DSState", EXIST=status)
         IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/ShortRange")
-            CALL CONSOLE('Subdirectory "ShortRange" created successfully.')
+            CALL SYSTEM("mkdir -p DATA/DSState")
+            CALL CONSOLE('Subdirectory "DSState" created successfully.')
         ELSE
-            CALL CONSOLE('Subdirectory "ShortRange" already exists.')
+            CALL CONSOLE('Subdirectory "DSState" already exists.')
         END IF
-        
-        ! Assignment of pointers to corresponding functions
-        V_ptr => V
-        dstateptr => dstate1
+    
 
        ! Printing V(x) to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/V.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/V.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(x)
@@ -793,219 +466,72 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/V.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/V.txt')
+        
+        ! Printing V Short Range b to file
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/V_SR.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V_SR(R) [eV]'
+        WRITE(iounit,*)
+        DO i = 1, SIZE(x)
+            WRITE(iounit, '(1E20.12)', advance='no') x(i)
+            DO j = 1, nv
+                V_A = V_params(j)
+                WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(x(i))+Z/x(i)-REAL(l_ang*(l_ang+1),KIND=idk)/(2.0d0*m*x(i)**2)* hbar**2) * phys_h0
+            END DO
+            WRITE(iounit,*)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/DSState/V_SR.txt')
 
     
         ! Creating initial discrete state
         IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
-        ALLOCATE(dstate(SIZE(x)))
-        DO i = 1, SIZE(x)
-            dstate(i) = dstateptr(x(i))
-        END DO
-        norm = SUM( ABS(dstate)**2 ) * dx
-        dstate = dstate / SQRT(norm)
-        CALL CONSOLE('Initial discrete state created successfully.')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/dstate.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(x)
-            WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            WRITE(iounit, '(1E20.12)', advance='no') dstate(i)
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/dstate.txt')
-    
-    
-        ! Computation of Gamma & Delta
-        IF (ALLOCATED(DeltaFull)) DEALLOCATE(DeltaFull)
-        IF (ALLOCATED(Gamma2Full)) DEALLOCATE(Gamma2Full)
-        IF (ALLOCATED(PhaseshiftFull)) DEALLOCATE(PhaseshiftFull)
-        IF (ALLOCATED(DS_PhaseshiftFull)) DEALLOCATE(DS_PhaseshiftFull)
-        IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
-        ALLOCATE(DeltaFull(nv,ep), Gamma2Full(nv,ep), PhaseshiftFull(nv,ep), DS_PhaseshiftFull(nv,ep), VdeFull(nv,ep))
-    
+        ALLOCATE(dstate(nv,SIZE(x)))
         DO j = 1, nv
             V_A = V_params(j)
-            WRITE(message, '(A,F0.3,A)') 'Computing in short-range potential with V_A = ', V_A, ' ...'
-            CALL CONSOLE(message)
-            CALL compute_DS(x, e, m, V_ptr, dstate, Delta, Gamma2, Phaseshift, DS_phaseshift, Vde)
-            DeltaFull(j,:) = Delta
-            Gamma2Full(j,:) = Gamma2
-            IF (unwrap) THEN
-                CALL unwrap_phaseshift(Phaseshift)
-                CALL unwrap_phaseshift(DS_phaseshift)
-            END IF
-            PhaseshiftFull(j,:) = Phaseshift
-            DS_PhaseshiftFull(j,:) = DS_phaseshift
-            VdeFull(j,:) = Vde
-            IF (ALLOCATED(Delta)) DEALLOCATE(Delta)
-            IF (ALLOCATED(Gamma2)) DEALLOCATE(Gamma2)
-            IF (ALLOCATED(Phaseshift)) DEALLOCATE(Phaseshift)
-            IF (ALLOCATED(DS_phaseshift)) DEALLOCATE(DS_phaseshift)
-            IF (ALLOCATED(Vde)) DEALLOCATE(Vde)
-        END DO
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/delta.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Delta [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-            DO j = 1, nv
-                WRITE(iounit, '(1E20.12)', advance='no') DeltaFull(j,i) * phys_h0
+            DO i = 1, SIZE(x)
+                dstate(j,i) = dstate_ptr(x(i))
             END DO
-            WRITE(iounit,*)
+        norm = SUM( ABS(dstate(j,:))**2 ) * dx
+        dstate(j,:) = dstate(j,:) / SQRT(norm)
         END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/delta.txt')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/gamma.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Gamma2 [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-            DO j = 1, nv
-                WRITE(iounit, '(1E20.12)', advance='no') Gamma2Full(j,i) * phys_h0
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/gamma.txt')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/phaseshift.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','phaseshift'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            IF (e(i) >= 0.0d0) THEN
-                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-                DO j = 1, nv
-                    WRITE(iounit, '(1E20.12)', advance='no') PhaseshiftFull(j,i)
-                END DO
-                WRITE(iounit,*)
-            END IF
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/phaseshift.txt')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/DS_phaseshift.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DS_phaseshift'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            IF (e(i) >= 0.0d0) THEN
-                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-                DO j = 1, nv
-                    WRITE(iounit, '(1E20.12)', advance='no') DS_phaseshiftFull(j,i)
-                END DO
-                WRITE(iounit,*)
-            END IF
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/DS_phaseshift.txt')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/ShortRange/Vde.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Vde [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            IF (e(i) >= 0.0d0) THEN
-                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-                DO j = 1, nv
-                    WRITE(iounit, '(1E20.12)', advance='no') VdeFull(j,i) * SQRT(phys_h0)
-                END DO
-                WRITE(iounit,*)
-            END IF
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/ShortRange/Vde.txt')
-    
-    END IF
-    
-    
-    !=================================================================================
-    !            Discrete state computation for Coulomb-like Potential
-    !=================================================================================
-    IF (coulomb_computation) THEN
-        INQUIRE(DIRECTORY="DATA/Coulomb", EXIST=status)
-        IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/Coulomb")
-            CALL CONSOLE('Subdirectory "Coulomb" created successfully.')
-        ELSE
-            CALL CONSOLE('Subdirectory "Coulomb" already exists.')
-        END IF
-        
-        ! Assignment of pointers to corresponding functions
-        V_ptr => V_coulomb2 !V_2D
-        dstateptr => dstate1 !dstate2D
-
-       ! Printing V(x) to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/V.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(x)
-            WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            DO j = 1, nv
-                V_A = V_params(j)
-                WRITE(iounit, '(1E20.12)', advance='no') V_ptr(x(i)) * phys_h0
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/V.txt')
-        
-        ! Printing V-Coulomb to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/V_NoC.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(x)
-            WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            DO j = 1, nv
-                V_A = V_params(j)
-                WRITE(iounit, '(1E20.12)', advance='no') (V_ptr(x(i))+Z/x(i)) * phys_h0
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/V_NoC.txt')
-
-    
-        ! Creating initial discrete state
-        ALLOCATE(dstate(SIZE(x)))
-        DO i = 1, SIZE(x)
-            dstate(i) = dstateptr(x(i))
-        END DO
-        norm = SUM( ABS(dstate)**2 ) * dx
-        dstate = dstate / SQRT(norm)
         CALL CONSOLE('Initial discrete state created successfully.')
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/dstate.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/dstate.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
         WRITE(iounit,*)
         DO i = 1, SIZE(x)
             WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            WRITE(iounit, '(1E20.12)', advance='no') dstate(i)
+            DO j = 1, nv
+                WRITE(iounit, '(1E20.12)', advance='no') dstate(j,i)
+            END DO
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/dstate.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/dstate.txt')
     
     
         ! Computation of Gamma & Delta
         IF (ALLOCATED(DeltaFull)) DEALLOCATE(DeltaFull)
         IF (ALLOCATED(Gamma2Full)) DEALLOCATE(Gamma2Full)
+        IF (ALLOCATED(DeltaAFull)) DEALLOCATE(DeltaAFull)
+        IF (ALLOCATED(Gamma2AFull)) DEALLOCATE(Gamma2AFull)
         IF (ALLOCATED(PhaseshiftFull)) DEALLOCATE(PhaseshiftFull)
         IF (ALLOCATED(DS_PhaseshiftFull)) DEALLOCATE(DS_PhaseshiftFull)
         IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
         IF (ALLOCATED(DSenergies)) DEALLOCATE(DSenergies)
-        ALLOCATE(DeltaFull(nv,ep), Gamma2Full(nv,ep), PhaseshiftFull(nv,ep), DS_PhaseshiftFull(nv,ep), VdeFull(nv,ep), DSenergies(nv))
+        ALLOCATE(DeltaFull(nv,ep), Gamma2Full(nv,ep), DeltaAFull(nv,ep), Gamma2AFull(nv,ep), PhaseshiftFull(nv,ep), DS_PhaseshiftFull(nv,ep), VdeFull(nv,ep), DSenergies(nv))
     
         DO j = 1, nv
             V_A = V_params(j)
             WRITE(message, '(A,F0.3,A)') 'Computing in Coulomb-like potential with V_A = ', V_A, ' ...'
             CALL CONSOLE(message)
-            CALL compute_DSenergy(x, m, V_ptr, dstate, DSenergies(j))
-            CALL compute_coulomb_DS(x, e, m, V_ptr, Z, dstate, Delta, Gamma2, Phaseshift, DS_phaseshift, Vde)
+            CALL compute_DSenergy(x, m, V_ptr, dstate(j,:), DSenergies(j))
+            CALL compute_DS(x, e, m, Z, l_ang, V_ptr, dstate(j,:), Delta, Gamma2, DeltaA, Gamma2A, Phaseshift, DS_phaseshift, Vde)
             DeltaFull(j,:) = Delta
             Gamma2Full(j,:) = Gamma2
+            DeltaAFull(j,:) = DeltaA
+            Gamma2AFull(j,:) = Gamma2A
             IF (unwrap) THEN
                 CALL unwrap_phaseshift(Phaseshift)
                 CALL unwrap_phaseshift(DS_phaseshift)
@@ -1015,22 +541,24 @@ PROGRAM MAIN
             VdeFull(j,:) = Vde
             IF (ALLOCATED(Delta)) DEALLOCATE(Delta)
             IF (ALLOCATED(Gamma2)) DEALLOCATE(Gamma2)
+            IF (ALLOCATED(DeltaA)) DEALLOCATE(DeltaA)
+            IF (ALLOCATED(Gamma2A)) DEALLOCATE(Gamma2A)
             IF (ALLOCATED(Phaseshift)) DEALLOCATE(Phaseshift)
             IF (ALLOCATED(DS_phaseshift)) DEALLOCATE(DS_phaseshift)
             IF (ALLOCATED(Vde)) DEALLOCATE(Vde)
         END DO
         
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/DSenergies.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/DSenergies.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A3, A21)', advance='no') '#', 'V_A','E_DS [eV]'
         WRITE(iounit,*)
         DO j = 1, nv
             WRITE(iounit, '(F5.3, 1E20.12)') V_params(j), DSenergies(j) * phys_h0
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/DSenergies.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/DSenergies.txt')
         
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/delta.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/delta.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Delta [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
@@ -1041,9 +569,9 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/delta.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/delta.txt')
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/gamma.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/gamma.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Gamma2 [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
@@ -1054,9 +582,42 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/gamma.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/gamma.txt')
+
+        IF (ABS(Z) > 1.0d-10) THEN
+            OPEN(NEWUNIT=iounit, FILE='DATA/DSState/deltaA.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Delta [eV]'
+            WRITE(iounit,*)
+            DO i = 1, SIZE(e)
+                IF (e(i) < 0.0d0 .AND. e(i) > cutoff_energy(l_ang)) THEN
+                    WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
+                    DO j = 1, nv
+                        WRITE(iounit, '(1E20.12)', advance='no') DeltaAFull(j,i) * phys_h0
+                    END DO
+                    WRITE(iounit,*)
+                END IF
+            END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/DSState/deltaA.txt')
+        
+            OPEN(NEWUNIT=iounit, FILE='DATA/DSState/gammaA.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Gamma2 [eV]'
+            WRITE(iounit,*)
+            DO i = 1, SIZE(e)
+                IF (e(i) < 0.0d0 .AND. e(i) > cutoff_energy(l_ang)) THEN
+                    WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
+                    DO j = 1, nv
+                        WRITE(iounit, '(1E20.12)', advance='no') Gamma2AFull(j,i) * phys_h0
+                    END DO
+                    WRITE(iounit,*)
+                END IF
+            END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/DSState/gammaA.txt')
+        END IF
+
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/phaseshift.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/phaseshift.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','phaseshift'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
@@ -1069,13 +630,14 @@ PROGRAM MAIN
             END IF
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/phaseshift.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/phaseshift.txt')
 
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/defect.txt', STATUS='replace', ACTION='write')
+        IF (ABS(Z) > 1.0d-10) THEN
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/defect.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','defect_phase'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
-            IF (e(i) < 0.0d0) THEN
+            IF (e(i) < 0.0d0 .AND. e(i) > cutoff_energy(l_ang)) THEN
                 WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
                 DO j = 1, nv
                     WRITE(iounit, '(1E20.12)', advance='no') PhaseshiftFull(j,i)
@@ -1084,9 +646,12 @@ PROGRAM MAIN
             END IF
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/phaseshift.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/defect.txt')
+        ELSE
+            CALL CONSOLE('Z is zero or very close to zero. Skipping defect phase output.')
+        END IF
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/DS_phaseshift.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/DS_phaseshift.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DS_phaseshift'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
@@ -1099,13 +664,14 @@ PROGRAM MAIN
             END IF
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/DS_phaseshift.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/DS_phaseshift.txt')
 
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/DS_defect.txt', STATUS='replace', ACTION='write')
+        IF (ABS(Z) > 1.0d-10) THEN
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/DS_defect.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DS_defect_phase'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
-            IF (e(i) < 0.0d0) THEN
+            IF (e(i) < 0.0d0 .AND. e(i) > cutoff_energy(l_ang)) THEN
                 WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
                 DO j = 1, nv
                     WRITE(iounit, '(1E20.12)', advance='no') DS_phaseshiftFull(j,i)
@@ -1114,26 +680,27 @@ PROGRAM MAIN
             END IF
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/DS_defect.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/DS_defect.txt')
+        ELSE
+            CALL CONSOLE('Z is zero or very close to zero. Skipping DS defect phase output.')
+        END IF
     
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/Vde.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/Vde.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','Vde [eV]'
         WRITE(iounit,*)
         DO i = 1, SIZE(e)
-            IF (e(i) >= 0.0d0) THEN
-                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-                DO j = 1, nv
-                    WRITE(iounit, '(1E20.12)', advance='no') VdeFull(j,i) * SQRT(phys_h0)
-                END DO
-                WRITE(iounit,*)
-            END IF
+            WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
+            DO j = 1, nv
+                WRITE(iounit, '(1E20.12)', advance='no') VdeFull(j,i) * SQRT(phys_h0)
+            END DO
+            WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Coulomb/Vde.txt')
+        CALL CONSOLE('Data successfully written to DATA/DSState/Vde.txt')
         
         ! Saving Vde to bin files for later use
         CALL CONSOLE('Caching VdeFull to binary files...')
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/Vde.bin', &
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/Vde.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')
         WRITE(iounit) VdeFull
         CLOSE(iounit)
@@ -1166,35 +733,39 @@ PROGRAM MAIN
             CALL CONSOLE('Subdirectory "Hilbert" already exists.')
         END IF
         
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
-        IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
         IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
         IF (ALLOCATED(DeltaContinuousFull)) DEALLOCATE(DeltaContinuousFull)
+        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
+        IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
         IF (ALLOCATED(DeltaRydbergFull)) DEALLOCATE(DeltaRydbergFull)
         
         CALL CONSOLE('Loading eigEFull, VdnFull & VdeFull from binary files...')
         
-        ALLOCATE(eigEFull(nv,Nbound))
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/eigE.bin', FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
-        IF (istat /= 0) THEN
-            CALL CONSOLE('[ERROR]: File eigE.bin cannot be found or openned.')
-            STOP 'Error reading eigE.bin'
-        END IF
-        READ(iounit) eigEFull
-        CLOSE(iounit)
+        IF (ABS(Z) > 1.0d-10) THEN
 
-        ALLOCATE(VdnFull(nv,Nbound))
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPStates/Vdn.bin', &
-             FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
-        IF (istat /= 0) THEN
-            CALL CONSOLE('[ERROR]: File Vdn.bin cannot be found or openned.')
-            STOP 'Error reading Vdn.bin'
+            ALLOCATE(eigEFull(nv,Nbound))
+            OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.bin', FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
+            IF (istat /= 0) THEN
+                CALL CONSOLE('[ERROR]: File eigE.bin cannot be found or openned.')
+                STOP 'Error reading eigE.bin'
+            END IF
+            READ(iounit) eigEFull
+            CLOSE(iounit)
+
+            ALLOCATE(VdnFull(nv,Nbound))
+            OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.bin', &
+                FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
+            IF (istat /= 0) THEN
+                CALL CONSOLE('[ERROR]: File Vdn.bin cannot be found or openned.')
+                STOP 'Error reading Vdn.bin'
+            END IF
+            READ(iounit) VdnFull
+            CLOSE(iounit)
+
         END IF
-        READ(iounit) VdnFull
-        CLOSE(iounit)
         
         ALLOCATE(VdeFull(nv,SIZE(e)))
-        OPEN(NEWUNIT=iounit, FILE='DATA/Coulomb/Vde.bin', &
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/Vde.bin', &
              FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
         IF (istat /= 0) THEN
             CALL CONSOLE('[ERROR]: File Vde.bin cannot be found or openned.')
@@ -1206,33 +777,35 @@ PROGRAM MAIN
         CALL CONSOLE('Binary cache loaded successfully.')
         
         
-        ! Printing eigenenergies
-        OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/En.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
-        WRITE(iounit,*)
-        DO i = 1, Nbound
-            WRITE(iounit, '(I3)', advance='no') i
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') eigEFull(j,i) * phys_h0
-            END DO
+        IF (ABS(Z) > 1.0d-10) THEN
+            ! Printing eigenenergies
+            OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/En.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
             WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Hilbert/En.txt')
-        
-        ! Printing Vdn
-        OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/Vdn.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n', 'Vdn [SQRT(eV)]'
-        WRITE(iounit,*)
-        DO i = 1, Nbound
-            WRITE(iounit, '(I3)', advance='no') i
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') VdnFull(j,i) * phys_h0
+            DO i = 1, Nbound
+                WRITE(iounit, '(I3)', advance='no') i
+                DO j = 1, nv 
+                    WRITE(iounit, '(1E20.12)', advance='no') eigEFull(j,i) * phys_h0
+                END DO
+                WRITE(iounit,*)
             END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/Hilbert/En.txt')
+            
+            ! Printing Vdn
+            OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/Vdn.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n', 'Vdn [SQRT(eV)]'
             WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Hilbert/Vdn.txt')
+            DO i = 1, Nbound
+                WRITE(iounit, '(I3)', advance='no') i
+                DO j = 1, nv 
+                    WRITE(iounit, '(1E20.12)', advance='no') VdnFull(j,i) * phys_h0
+                END DO
+                WRITE(iounit,*)
+            END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/Hilbert/Vdn.txt')
+        END IF
         
         ! Printing Vde
         OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/Vde.txt', STATUS='replace', ACTION='write')
@@ -1268,54 +841,59 @@ PROGRAM MAIN
             IF (ALLOCATED(Vde)) DEALLOCATE(Vde)
             WRITE(message, '(A,F0.3,A)') 'Computation of Hilbert transform for V_A = ', V_A, ' completed.'
             CALL CONSOLE(message)
-            WRITE(message, '(A,F0.3,A)') 'Computing Rydberg-part of Delta for V_A = ', V_A, '...'
-            CALL CONSOLE(message)
-            IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
-            IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
-            ALLOCATE(DeltaRydberg(SIZE(e)))
-            ALLOCATE(Vdn(Nbound))
-            ALLOCATE(eigE(Nbound))
-            Vdn(:) = VdnFull(j,:)
-            eigE(:) = eigEFull(j,:)
-            CALL ComputeDeltaRydberg(e, Vdn, eigE, DeltaRydberg)
-            DeltaRydbergFull(j,:) = DeltaRydberg
-            IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
-            IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)      
-            WRITE(message, '(A,F0.3,A)') 'Computation of Rydberg-part of Delta for V_A = ', V_A, ' completed.'
-            CALL CONSOLE(message)
+            IF (ABS(Z) > 1.0d-10) THEN
+                WRITE(message, '(A,F0.3,A)') 'Computing Rydberg-part of Delta for V_A = ', V_A, '...'
+                CALL CONSOLE(message)
+                IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
+                IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
+                IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
+                ALLOCATE(DeltaRydberg(SIZE(e)))
+                ALLOCATE(Vdn(Nbound))
+                ALLOCATE(eigE(Nbound))
+                Vdn(:) = VdnFull(j,:)
+                eigE(:) = eigEFull(j,:)
+                CALL ComputeDeltaRydberg(e, Vdn, eigE, DeltaRydberg)
+                DeltaRydbergFull(j,:) = DeltaRydberg
+                IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
+                IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
+                IF (ALLOCATED(eigE)) DEALLOCATE(eigE)      
+                WRITE(message, '(A,F0.3,A)') 'Computation of Rydberg-part of Delta for V_A = ', V_A, ' completed.'
+                CALL CONSOLE(message)
+            ELSE
+                DeltaRydbergFull(j,:) = 0.0d0
+            END IF
         END DO
         
-        
-        ! Printing Delta Continuous
-        OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/DeltaContinuous.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DeltaC [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-            DO j = 1, nv
-                WRITE(iounit, '(1E20.12)', advance='no') DeltaContinuousFull(j,i) * phys_h0
-            END DO
+        IF (ABS(Z) > 1.0d-10) THEN
+            ! Printing Delta Continuous
+            OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/DeltaContinuous.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DeltaC [eV]'
             WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Hilbert/DeltaContinuous.txt')
-        
-        
-        ! Printing Delta Rydberg
-        OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/DeltaRydberg.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DeltaC [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(e)
-            WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
-            DO j = 1, nv
-                WRITE(iounit, '(1E20.12)', advance='no') DeltaRydbergFull(j,i) * phys_h0
+            DO i = 1, SIZE(e)
+                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
+                DO j = 1, nv
+                    WRITE(iounit, '(1E20.12)', advance='no') DeltaContinuousFull(j,i) * phys_h0
+                END DO
+                WRITE(iounit,*)
             END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/Hilbert/DeltaContinuous.txt')
+            
+            
+            ! Printing Delta Rydberg
+            OPEN(NEWUNIT=iounit, FILE='DATA/Hilbert/DeltaRydberg.txt', STATUS='replace', ACTION='write')
+            WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','DeltaC [eV]'
             WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/Hilbert/DeltaRydberg.txt')
+            DO i = 1, SIZE(e)
+                WRITE(iounit, '(1E20.12)', advance='no') e(i) * phys_h0
+                DO j = 1, nv
+                    WRITE(iounit, '(1E20.12)', advance='no') DeltaRydbergFull(j,i) * phys_h0
+                END DO
+                WRITE(iounit,*)
+            END DO
+            CLOSE(iounit)
+            CALL CONSOLE('Data successfully written to DATA/Hilbert/DeltaRydberg.txt')
+        END IF
         
         
         ! Printing Delta Full
@@ -1387,13 +965,13 @@ PROGRAM MAIN
     REAL(KIND = idk) FUNCTION V_2D(R)
         IMPLICIT NONE
         REAL(KIND = idk), INTENT(IN) :: R
-        REAL(KIND = idk), PARAMETER :: a = 0.5d0
-        REAL(KIND = idk), PARAMETER :: b = 1.2d0
-        REAL(KIND = idk), PARAMETER :: c = 1.8d0
-        REAL(KIND = idk), PARAMETER :: d = 0.6519d0
-        REAL(KIND = idk), PARAMETER :: rc = 4.5d0
+        REAL(KIND = idk), PARAMETER :: a = 0.4d0
+        REAL(KIND = idk), PARAMETER :: b = 2.0d0
+        REAL(KIND = idk), PARAMETER :: c = 1.5d0
+        REAL(KIND = idk), PARAMETER :: d = 0.72d0
+        REAL(KIND = idk), PARAMETER :: rc = 5.0d0
         REAL(KIND = idk), PARAMETER :: rrc = 1.5d0
-        V_2D = - 1.0d0 / R + 1.0d0 / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
+        V_2D = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
     END FUNCTION V_2D
     
     
@@ -1418,7 +996,11 @@ PROGRAM MAIN
     REAL(KIND = idk) FUNCTION dstate2D(R)
         IMPLICIT NONE
         REAL(KIND = idk), INTENT(IN) :: R
-        dstate2D = R * EXP(-(R-1.825d0)**2 / 2.0d0 * 0.65d0)
+        REAL(KIND = idk) :: r0_val, vpp_val, alpha_val
+        r0_val = 2.0000399463254763 - 0.23313506121835248*TANH(1.6687920618773417*(-1.1726784346053065 + V_A)) - 0.47621440751149846*Tanh(0.699057007565932*(-1.0900928248785635 + V_A))
+        vpp_val = 0.4911722132480025 + 0.4788236657617127/EXP(0.5254434396192675*V_A**2) + 0.5824851552152334*TANH(0.6948355643578058*(-2.104488212788001 + V_A)) + 0.23611621449803974*Tanh(1.3301337541821736*(-1.7627644298851943 + V_A))
+        alpha_val = 2.0d0 / sqrt(vpp_val)
+        dstate2D = R * EXP(-(R-r0_val)**2 / alpha_val)
     END FUNCTION dstate2D
     
 END PROGRAM MAIN

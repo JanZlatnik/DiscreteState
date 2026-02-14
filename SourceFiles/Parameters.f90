@@ -28,56 +28,49 @@ MODULE Parameters
     
     
     ! Computational settings
-    LOGICAL, PARAMETER                  :: test = .FALSE.
-    LOGICAL, PARAMETER                  :: boundstates = .FALSE.
-    LOGICAL, PARAMETER                  :: PHPstates = .FALSE.
-    LOGICAL, PARAMETER                  :: NO_coulomb_computation = .FALSE.
-    LOGICAL, PARAMETER                  :: coulomb_computation = .TRUE.
+    LOGICAL, PARAMETER                  :: Rydbergstates = .TRUE.
+    LOGICAL, PARAMETER                  :: PHPRydbergstates = .FALSE.
+    LOGICAL, PARAMETER                  :: dstate_computation = .FALSE.
     LOGICAL, PARAMETER                  :: hilbert_computation = .FALSE.
     
         
     LOGICAL, PARAMETER                  :: unwrap = .TRUE.
     
     
-
-    ! Test settings 
-    REAL(KIND = idk), PARAMETER         :: e_test = 7.0d0               ! testing energy
     
     ! Potential settings
-    REAL(KIND = idk), PARAMETER         :: Vmin = -0.15d0 !0.7d0 !Vmin = -0.15d0               ! potential parameter V_A - minimum
-    REAL(KIND = idk), PARAMETER         :: Vmax = 0.3d0 !10.0d0!Vmax = 0.3d0                 ! potential parameter V_A - maximum
+    REAL(KIND = idk), PARAMETER         :: Vmin = 0.7d0                 ! potential parameter V_A - minimum
+    REAL(KIND = idk), PARAMETER         :: Vmax = 10.0d0                ! potential parameter V_A - maximum
     INTEGER, PARAMETER                  :: nv = 10                      ! number of diferent potential parameters calculated
     REAL(KIND = idk), PARAMETER         :: Z = 1.0d0                    ! strenght of Coulombic potential, i.e. Z/r
 
     ! Bound state parameters
-    INTEGER, PARAMETER          :: max_iter = 80                        ! maximum number of bisections on a test grid
-    INTEGER, PARAMETER          :: max_iter2 = 60                       ! maximum number of bisections in defect convergence process
-    REAL(KIND = idk), PARAMETER :: mueps = 1.0d-5                       ! threshold for defect convergence before fitting muint + B/n^2 
-    INTEGER, PARAMETER          :: N_fit_min_n = 60                     ! threshold for minimal number of states computed before fitting
+    INTEGER, PARAMETER          :: max_iter = 60                        ! maximum number of bisections on a test grid
+    INTEGER, PARAMETER          :: max_iter2 = 50                       ! maximum number of bisections in defect convergence process
+    REAL(KIND = idk), PARAMETER :: mueps = 1.0d-6                       ! threshold for defect convergence before fitting muint + B/n^2 
+    INTEGER, PARAMETER          :: N_fit_min_n = 100                    ! threshold for minimal number of states computed before fitting
     INTEGER, PARAMETER          :: N_fit_points = 15                    ! number of fitted points
-    INTEGER, PARAMETER          :: NperN = 350                          ! number of test grid points per expected state
+    INTEGER, PARAMETER          :: NperN = 400                          ! number of test grid points per expected state
     REAL(KIND = idk), PARAMETER :: gridtail = 1.0d0                     ! tail size for test grid
-    REAL(KIND = idk), PARAMETER :: Ebound_min = -0.6d0 !-10.0d0 / phys_h0       ! minimum energy in test grid
+    REAL(KIND = idk), PARAMETER :: Ebound_min = -0.18d0                  ! minimum energy in test grid
     INTEGER, PARAMETER          :: Nbound = 200                         ! number of bound states explicitely calculated
-    INTEGER, PARAMETER          :: Nstart = 20 !10                          ! number of bound states computed on test grid
+    INTEGER, PARAMETER          :: Nstart = 10                          ! number of bound states computed on test grid
     INTEGER, PARAMETER          :: Nprint = 50                          ! number of wavefucntions of bound states printed
     
     ! Mesh settings
     REAL(KIND = idk), PARAMETER :: xmin = 1.0d-10         ! in [au]
-    REAL(KIND = idk), PARAMETER :: xmax = 10.0d0          ! in [au]
+    REAL(KIND = idk), PARAMETER :: xmax = 14.0d0          ! in [au]
     INTEGER, PARAMETER          :: mp = 3000
     
     ! Energy mesh settings
-    REAL(KIND = idk), PARAMETER :: Emin = -15.0d0/phys_h0       ! [eV] to [au]
-    REAL(KIND = idk), PARAMETER :: Emax = 15.0d0/phys_h0        ! [eV] to [au]
-    INTEGER, PARAMETER          :: ep = 40000
+    REAL(KIND = idk), PARAMETER :: Emin = -4000.0d0/phys_h0       ! [eV] to [au]
+    REAL(KIND = idk), PARAMETER :: Emax = 4000.0d0/phys_h0        ! [eV] to [au]
+    INTEGER, PARAMETER          :: ep = 10000000
 
     ! Other parameters
     REAL(KIND = idk), PARAMETER :: m = 1.0d0        ! mass in [au]
-    INTEGER, PARAMETER          :: l_ang = 0        ! angular momentum quantum number of the detached electron (l=0 for s-wave detachment, l=1 for p-wave detachment, etc.)
+    INTEGER, PARAMETER          :: l_ang = 1        ! angular momentum quantum number of the detached electron (l=0 for s-wave detachment, l=1 for p-wave detachment, etc.)
     REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]
-    REAL(KIND = idk), PARAMETER :: turnplus = 1.0d0 ! extention compared to the classical turning point [au]
-    REAL(KIND = idk), PARAMETER :: xshort = 16.0d0  ! approximate maximal range of the SR potential [au]
     
     CONTAINS
     
@@ -120,6 +113,17 @@ MODULE Parameters
         WRITE(str_out, '(I0)') k 
         str_out = ADJUSTL(str_out)    
     END FUNCTION STR
+
+
+    FUNCTION cutoff_energy(l) RESULT(Ecut)
+        INTEGER, INTENT(IN) :: l
+        REAL(KIND = idk) :: Ecut
+        IF (l == 0) THEN
+            Ecut = -1.0d0
+        ELSE
+            Ecut = -1.0d0 / (2.0d0 * REAL(l, KIND=idk)**2)
+        END IF
+    END FUNCTION cutoff_energy
     
     
     
@@ -132,11 +136,9 @@ MODULE Parameters
         WRITE(unit,*) "=============================================================="
         
         WRITE(unit,*) ""
-        WRITE(unit,'(A35,1X,L1)') "test:", test
-        WRITE(unit,'(A35,1X,L1)') "boundstates:", boundstates
-        WRITE(unit,'(A35,1X,L1)') "PHPstates:", PHPstates
-        WRITE(unit,'(A35,1X,L1)') "NO_coulomb_computation:", NO_coulomb_computation
-        WRITE(unit,'(A35,1X,L1)') "coulomb_computation:", coulomb_computation
+        WRITE(unit,'(A35,1X,L1)') "RydbergStates:", Rydbergstates 
+        WRITE(unit,'(A35,1X,L1)') "PHPRydbergStates:", PHPRydbergstates
+        WRITE(unit,'(A35,1X,L1)') "dstate_computation:", dstate_computation
         WRITE(unit,'(A35,1X,L1)') "hilbert_computation:", hilbert_computation
         WRITE(unit,*) ""
 
@@ -187,8 +189,6 @@ MODULE Parameters
         WRITE(unit,'(A25,1X,F0.6)') "m:", m
         WRITE(unit,'(A25,1X,I0)')   "l:", l_ang
         WRITE(unit,'(A25,1X,F0.6)') "R0:", R0
-        WRITE(unit,'(A25,1X,F0.6)') "turnplus:", turnplus
-        WRITE(unit,'(A25,1X,F0.6)') "xshort:", xshort
         WRITE(unit,*) ""   
         
         
@@ -209,6 +209,9 @@ MODULE Parameters
     
     
     END SUBROUTINE
+
+
+
     
     
 END MODULE Parameters

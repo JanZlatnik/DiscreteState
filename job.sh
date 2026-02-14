@@ -7,7 +7,7 @@
 
 # --- SBATCH Partition Settings ---
 #SBATCH --partition=ffa
-#SBATCH --time=00:15:00
+#SBATCH --time=11:59:00
 
 # --- SBATCH Computation settings Settings ---
 #SBATCH --nodes=1
@@ -38,6 +38,7 @@ export OMP_MAX_ACTIVE_LEVELS=1
 
 # Running computation
 echo "Running computation $HOME/DiscreteState/discrete_state"
+#$HOME/DiscreteState/debug_discrete_state
 $HOME/DiscreteState/discrete_state
 
 echo "=========================================================="
