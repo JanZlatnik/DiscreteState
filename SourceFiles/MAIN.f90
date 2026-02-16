@@ -12,8 +12,7 @@ PROGRAM MAIN
     USE COULCC_M, only: COULCC
     USE whittaker_w, only: coulomb_whittaker
     USE Green
-    USE RadialShooting
-    USE PHPBound
+    USE RydbergSolver
     USE GDTrans
     USE, INTRINSIC :: ieee_arithmetic
 
@@ -22,10 +21,12 @@ PROGRAM MAIN
     REAL(KIND = idk), ALLOCATABLE :: Delta(:), Gamma2(:), DeltaA(:), Gamma2A(:), Phaseshift(:), DS_phaseshift(:), Vde(:)
     REAL(KIND = idk), ALLOCATABLE :: DeltaFull(:,:), Gamma2Full(:,:), DeltaAFull(:,:), Gamma2AFull(:,:), PhaseshiftFull(:,:), DS_phaseshiftFull(:,:), VdeFull(:,:)
     REAL(KIND = idk), ALLOCATABLE :: DeltaContinuous(:), DeltaContinuousFull(:,:), DeltaRydbergFull(:,:), DeltaRydberg(:)
-    REAL(KIND = idk), ALLOCATABLE :: dstate(:,:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:)
-    REAL(KIND = idk), ALLOCATABLE :: boundEgrid(:), eigEFull(:,:), defects(:,:), logdevsFull(:,:), overlapsFull(:,:), eigE(:), eigFunc(:,:), logdevs(:), DSenergies(:), overlaps(:), VdnFull(:,:), Vdn(:), defect(:)
+    REAL(KIND = idk), ALLOCATABLE :: dstate(:,:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:), DSenergies(:)
+    REAL(KIND = idk), ALLOCATABLE :: boundEgrid(:), eigEFull_H(:,:), defects_H(:,:), defect_H(:), logdevsFull(:,:), logdevs(:), eigE_H(:)
+    REAL(KIND = idk), ALLOCATABLE :: eigEFull_PHP(:,:), defects_PHP(:,:), eigE_PHP(:), eigFunc(:,:), defect_PHP(:)
+    REAL(KIND = idk), ALLOCATABLE :: VdnFull(:,:), Vdn(:)
     COMPLEX(KIND = idk), ALLOCATABLE :: cmplxscatstate(:)
-    INTEGER :: status, iounit, i, j, Negrid, Nfound, jj, Nfull, l
+    INTEGER :: status, iounit, i, j, Negrid, jj, Nfull, l
     REAL(KIND = idk) :: dx, dE, dV, norm, k, x_cut, wronski, h, Ascale
     CHARACTER(LEN=256) :: message
     REAL(KIND=idk) :: xxx, eta, w, wd
@@ -47,9 +48,13 @@ PROGRAM MAIN
 
     PROCEDURE(real_function_interface), POINTER :: V_ptr, dstate_ptr
 
+
+
     V_ptr => V_2D
     dstate_ptr => dstate2D
     
+
+
     
     print*, '=============================================================='
     print*, '           DISCRETE STATE IN CONTINUUM COMPUTATION            '
@@ -119,32 +124,72 @@ PROGRAM MAIN
         END DO
         CLOSE(iounit)
         CALL CONSOLE('Data successfully written to DATA/RydbergStates/V.txt')
+
+
+        ! Creating initial discrete state
+        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
+        ALLOCATE(dstate(nv,SIZE(x)))
+        DO j = 1, nv
+            V_A = V_params(j)
+            DO i = 1, SIZE(x)
+                dstate(j,i) = dstate_ptr(x(i))
+            END DO
+        norm = SUM( ABS(dstate(j,:))**2 ) * dx
+        dstate(j,:) = dstate(j,:) / SQRT(norm)
+        END DO
+        CALL CONSOLE('Initial discrete state created successfully.')
+    
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/dstate.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
+        WRITE(iounit,*)
+        DO i = 1, SIZE(x)
+            WRITE(iounit, '(1E20.12)', advance='no') x(i)
+            DO j = 1, nv
+                WRITE(iounit, '(1E20.12)', advance='no') dstate(j,i)
+            END DO
+            WRITE(iounit,*)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/dstate.txt')
         
         
         
         CALL rydberg_grid(Nbound, NperN, gridtail, Ebound_min, boundEgrid)
         Negrid = SIZE(boundEgrid)
         
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
-        IF (ALLOCATED(defects)) DEALLOCATE(defects)
+        IF (ALLOCATED(eigEFull_H)) DEALLOCATE(eigEFull_H)
+        IF (ALLOCATED(defects_H)) DEALLOCATE(defects_H)
         IF (ALLOCATED(logdevsFull)) DEALLOCATE(logdevsFull)
+        IF (ALLOCATED(eigEFull_PHP)) DEALLOCATE(eigEFull_PHP)
+        IF (ALLOCATED(defects_PHP)) DEALLOCATE(defects_PHP)
+        IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
+
         
-        ALLOCATE(eigEFull(nv,Nbound), defects(nv,Nbound), logdevsFull(nv,Negrid))
+        ALLOCATE(eigEFull_H(nv,Nbound))
+        ALLOCATE(defects_H(nv,Nbound))
+        ALLOCATE(logdevsFull(nv,Negrid))
+        ALLOCATE(eigEFull_PHP(nv,Nbound))
+        ALLOCATE(defects_PHP(nv,Nbound))
+        ALLOCATE(VdnFull(nv,Nbound))
         
         DO j = 1, nv
             V_A = V_params(j)
             WRITE(message, '(A,F0.3,A)') 'Computing in short-range potential with V_A = ', V_A, ' ...'
             CALL CONSOLE(message)
             
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
-            IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
-            IF (ALLOCATED(logdevs)) DEALLOCATE(logdevs)
-            IF (ALLOCATED(defect)) DEALLOCATE(defect)
+            IF(ALLOCATED(eigE_H)) DEALLOCATE(eigE_H)
+            IF(ALLOCATED(eigE_PHP)) DEALLOCATE(eigE_PHP)
+            IF(ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
+            IF(ALLOCATED(logdevs)) DEALLOCATE(logdevs)
+            IF(ALLOCATED(defect_H)) DEALLOCATE(defect_H)
+            IF(ALLOCATED(defect_PHP)) DEALLOCATE(defect_PHP)
             
-            CALL ComputeBoundStates(x, boundEgrid, m, V_ptr, Z, l_ang, Nbound, Nstart, eigE, eigFunc, Nfound, logdevs, defect)    
+            CALL ComputeRydbergSystem(x, dstate(j,:), boundEgrid, m, Z, l_ang, V_ptr, Nbound, Nstart, N_fit_points, logdevs, eigE_H, eigE_PHP, eigFunc, defect_H, defect_PHP)   
             
-            eigEFull(j,:) = eigE
-            defects(j,:) = defect
+            eigEFull_H(j,:) = eigE_H
+            defects_H(j,:) = defect_H
+            eigEFull_PHP(j,:) = eigE_PHP
+            defects_PHP(j,:) = defect_PHP
             logdevsFull(j,:) = logdevs
             
             ! Printing eigenfunctions
@@ -155,17 +200,25 @@ PROGRAM MAIN
             WRITE(iounit,*)
             DO jj = 1, SIZE(x)
                 WRITE(iounit, '(1E20.12)', advance='no') x(jj)
-                DO i = 1, MIN(Nfound,Nprint)
+                DO i = 1, MIN(Nbound,Nprint)
                     WRITE(iounit, '(1E20.12)', advance='no') eigFunc(jj,i)
                 END DO
                 WRITE(iounit,*)
             END DO
             CLOSE(iounit)
             
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
+            IF(ALLOCATED(eigE_H)) DEALLOCATE(eigE_H)
+            IF(ALLOCATED(eigE_PHP)) DEALLOCATE(eigE_PHP)
+            IF(ALLOCATED(logdevs)) DEALLOCATE(logdevs)
+            IF(ALLOCATED(defect_H)) DEALLOCATE(defect_H)
+            IF(ALLOCATED(defect_PHP)) DEALLOCATE(defect_PHP)
+            
+            ALLOCATE(Vdn(Nbound))
+            CALL ComputeVdn(x, dstate(j,:), m, V_ptr, eigFunc, Vdn)
+            VdnFull(j,:) = Vdn
+    
             IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
-            IF (ALLOCATED(logdevs)) DEALLOCATE(logdevs)
-            IF (ALLOCATED(defect)) DEALLOCATE(defect)
+            IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
             
         END DO
 
@@ -188,203 +241,63 @@ PROGRAM MAIN
         CALL CONSOLE('Data successfully written to DATA/RydbergStates/logderivs.txt')
         
         ! Printing eigenenergies
-        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
-        WRITE(iounit,*)
-        DO i = 1, Nfound
-            WRITE(iounit, '(I3)', advance='no') i
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') eigEFull(j,i) * phys_h0
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/RydbergStates/eigE.txt')
-        
-        
-        ! Printing defects
-        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/defects.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
-        WRITE(iounit,*)
-        DO i = 1, Nfound
-            WRITE(iounit, '(I3)', advance='no') i
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') defects(j,i)
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/RydbergStates/defects.txt')        
-        
-        
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
-        IF (ALLOCATED(defects)) DEALLOCATE(defects)
-        IF (ALLOCATED(logdevsFull)) DEALLOCATE(logdevsFull)
-        
-        
-    ELSE
-        CALL CONSOLE('[ERROR]: Z is zero or very close to zero. Skipping Rydberg state computation.') 
-    END IF   
-    END IF
-    
-    
-    !=================================================================================
-    !                PHP Rydberg states in Coulomb-like potential
-    !=================================================================================
-    IF (PHPRydbergstates) THEN
-    IF (ABS(Z) > 1.0d-10) THEN
-        INQUIRE(DIRECTORY="DATA/PHPRydbergStates", EXIST=status)
-        IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/PHPRydbergStates")
-            CALL CONSOLE('Subdirectory "PHPRydbergStates" created successfully.')
-        ELSE
-            CALL CONSOLE('Subdirectory "PHPRydbergStates" already exists.')
-        END IF
-        
-        INQUIRE(DIRECTORY="DATA/PHPRydbergStates/Eigenfunctions", EXIST=status)
-        IF (.NOT. status) THEN
-            CALL SYSTEM("mkdir -p DATA/PHPRydbergStates/Eigenfunctions")
-            CALL CONSOLE('Subdirectory "Eigenfunctions" created successfully.')
-        ELSE
-            CALL CONSOLE('Subdirectory "Eigenfunctions" already exists.')
-        END IF
-        
-        ! Creating initial discrete state
-        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
-        ALLOCATE(dstate(nv,SIZE(x)))
-        DO j = 1, nv
-            V_A = V_params(j)
-            DO i = 1, SIZE(x)
-                dstate(j,i) = dstate_ptr(x(i))
-            END DO
-        norm = SUM( ABS(dstate(j,:))**2 ) * dx
-        dstate(j,:) = dstate(j,:) / SQRT(norm)
-        END DO
-        CALL CONSOLE('Initial discrete state created successfully.')
-    
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/dstate.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(x)
-            WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            DO j = 1, nv
-                WRITE(iounit, '(1E20.12)', advance='no') dstate(j,i)
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/dstate.txt')
-        
-        ! Printing V(x) to file
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/V.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','V(R) [eV]'
-        WRITE(iounit,*)
-        DO i = 1, SIZE(x)
-            WRITE(iounit, '(1E20.12)', advance='no') x(i)
-            DO j = 1, nv
-                V_A = V_params(j)
-                WRITE(iounit, '(1E20.12)', advance='no') V_ptr(x(i)) * phys_h0
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/V.txt')
-        
-        
-        
-        CALL rydberg_grid(Nstart, NperN, gridtail, Ebound_min, boundEgrid)
-        Negrid = SIZE(boundEgrid)
-        
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
-        IF (ALLOCATED(overlapsFull)) DEALLOCATE(overlapsFull)
-        IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
-        IF (ALLOCATED(defects)) DEALLOCATE(defects)
-        
-        ALLOCATE(eigEFull(nv,Nbound), overlapsFull(nv,Negrid), VdnFull(nv,Nbound), defects(nv,Nbound))
-        
-        DO j = 1, nv
-            V_A = V_params(j)
-            WRITE(message, '(A,F0.3,A)') 'Computing in short-range potential with V_A = ', V_A, ' ...'
-            CALL CONSOLE(message)
-
-            
-            
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
-            IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
-            IF (ALLOCATED(overlaps)) DEALLOCATE(overlaps)
-            IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-            IF (ALLOCATED(defect)) DEALLOCATE(defect)
-            
-            CALL ComputePHPBoundStates(x, dstate(j,:), boundEgrid, m, V_ptr, Z, l_ang, Nbound, Nstart, eigE, eigFunc, Nfound, overlaps, defect)
-            
-            eigEFull(j,:) = eigE
-            overlapsFull(j,:) = overlaps
-            defects(j,:) = defect
-            
-            IF (ALLOCATED(defect)) DEALLOCATE(defect)
-            
-            ! Printing eigenfunctions
-            WRITE(filename, '(F0.3)') V_A
-            filename = 'DATA/PHPRydbergStates/Eigenfunctions/eigFunc_VA_' // TRIM(ADJUSTL(filename)) // '.txt'
-            OPEN(NEWUNIT=iounit, FILE=filename, STATUS='replace', ACTION='write')
-            WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'R [au]','|psi_n>'
-            WRITE(iounit,*)
-            DO jj = 1, SIZE(x)
-                WRITE(iounit, '(1E20.12)', advance='no') x(jj)
-                DO i = 1, MIN(Nfound,Nprint)
-                    WRITE(iounit, '(1E20.12)', advance='no') eigFunc(jj,i)
-                END DO
-                WRITE(iounit,*)
-            END DO
-            CLOSE(iounit)
-            
-            IF (ALLOCATED(overlaps)) DEALLOCATE(overlaps)
-            IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
-            
-            ALLOCATE(Vdn(Nbound))
-            CALL ComputeVdn(x, dstate(j,:), m, V_ptr, eigFunc, Vdn)
-            VdnFull(j,:) = Vdn
-    
-            IF (ALLOCATED(eigFunc)) DEALLOCATE(eigFunc)
-            IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-            
-        END DO
-
-        
-        
-        
-        ! Printing log-derivatives on test grid
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/overlaps.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'E [eV]','d/dr log(u) [1/Bohr]'
-        WRITE(iounit,*)
-        DO i = 1, Negrid
-            WRITE(iounit, '(I15)', advance='no') i
-            WRITE(iounit, '(1E20.12)', advance='no') boundEgrid(i) * phys_h0
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') overlapsFull(j,i)
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/overlaps.txt')
-        
-        ! Printing eigenenergies
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.txt', STATUS='replace', ACTION='write')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_H.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
         WRITE(iounit,*)
         DO i = 1, Nbound
             WRITE(iounit, '(I3)', advance='no') i
             DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') eigEFull(j,i) * phys_h0
+                WRITE(iounit, '(1E20.12)', advance='no') eigEFull_H(j,i) * phys_h0
             END DO
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/eigE.txt')
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/eigE_H.txt')
+
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_PHP.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
+        WRITE(iounit,*)
+        DO i = 1, Nbound
+            WRITE(iounit, '(I3)', advance='no') i
+            DO j = 1, nv 
+                WRITE(iounit, '(1E20.12)', advance='no') eigEFull_PHP(j,i) * phys_h0
+            END DO
+            WRITE(iounit,*)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/eigE_PHP.txt')
         
+        
+        ! Printing defects
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/defects_H.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','mu_n'
+        WRITE(iounit,*)
+        DO i = 1, Nbound
+            WRITE(iounit, '(I3)', advance='no') i
+            DO j = 1, nv 
+                WRITE(iounit, '(1E20.12)', advance='no') defects_H(j,i)
+            END DO
+            WRITE(iounit,*)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/defects_H.txt')
+        
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/defects_PHP.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','mu_n'
+        WRITE(iounit,*)
+        DO i = 1, Nbound
+            WRITE(iounit, '(I3)', advance='no') i
+            DO j = 1, nv 
+                WRITE(iounit, '(1E20.12)', advance='no') defects_PHP(j,i)
+            END DO
+            WRITE(iounit,*)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/defects_PHP.txt')    
+
         ! Printing Vdn
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n', 'Vdn [sqrt(eV)]'
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/Vdn.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n', 'Vdn [eV]'
         WRITE(iounit,*)
         DO i = 1, Nbound
             WRITE(iounit, '(I3)', advance='no') i
@@ -394,49 +307,33 @@ PROGRAM MAIN
             WRITE(iounit,*)
         END DO
         CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/Vdn.txt')
-        
-        ! Printing defects
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/defects.txt', STATUS='replace', ACTION='write')
-        WRITE(iounit, '(A1, A2, A21)', advance='no') '#', 'n','E_n [eV]'
-        WRITE(iounit,*)
-        DO i = 1, Nfound
-            WRITE(iounit, '(I3)', advance='no') i
-            DO j = 1, nv 
-                WRITE(iounit, '(1E20.12)', advance='no') defects(j,i)
-            END DO
-            WRITE(iounit,*)
-        END DO
-        CLOSE(iounit)
-        CALL CONSOLE('Data successfully written to DATA/PHPRydbergStates/defects.txt')  
-        
-        
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/Vdn.txt')
+
         ! Saving Vdn and eigE to bin files for later use
-        CALL CONSOLE('Caching eigEFull and VdnFull to binary files...')
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.bin', &
+        CALL CONSOLE('Caching eigEFull_PHP and VdnFull to binary files...')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_PHP.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')
-        WRITE(iounit) eigEFull
+        WRITE(iounit) eigEFull_PHP
         CLOSE(iounit)
-        OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.bin', &
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/Vdn.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')
         WRITE(iounit) VdnFull
         CLOSE(iounit)
         CALL CONSOLE('Binary cache saved successfully.')
-               
+
         
-        
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
+        IF (ALLOCATED(eigEFull_H)) DEALLOCATE(eigEFull_H)
+        IF (ALLOCATED(defects_H)) DEALLOCATE(defects_H)
         IF (ALLOCATED(logdevsFull)) DEALLOCATE(logdevsFull)
-        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
+        IF (ALLOCATED(eigEFull_PHP)) DEALLOCATE(eigEFull_PHP)
+        IF (ALLOCATED(defects_PHP)) DEALLOCATE(defects_PHP)
         IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
-        IF (ALLOCATED(defects)) DEALLOCATE(defects)
         
         
     ELSE
-        CALL CONSOLE('[ERROR]: Z is zero or very close to zero. Skipping PHP Rydberg state computation.')    
+        CALL CONSOLE('[ERROR]: Z is zero or very close to zero. Skipping Rydberg state computation.') 
+    END IF   
     END IF
-    END IF
-    
     
     
     
@@ -735,7 +632,7 @@ PROGRAM MAIN
         
         IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
         IF (ALLOCATED(DeltaContinuousFull)) DEALLOCATE(DeltaContinuousFull)
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
+        IF (ALLOCATED(eigEFull_PHP)) DEALLOCATE(eigEFull_PHP)
         IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
         IF (ALLOCATED(DeltaRydbergFull)) DEALLOCATE(DeltaRydbergFull)
         
@@ -743,17 +640,17 @@ PROGRAM MAIN
         
         IF (ABS(Z) > 1.0d-10) THEN
 
-            ALLOCATE(eigEFull(nv,Nbound))
-            OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/eigE.bin', FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
+            ALLOCATE(eigEFull_PHP(nv,Nbound))
+            OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_PHP.bin', FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
             IF (istat /= 0) THEN
-                CALL CONSOLE('[ERROR]: File eigE.bin cannot be found or openned.')
-                STOP 'Error reading eigE.bin'
+                CALL CONSOLE('[ERROR]: File eigE_PHP.bin cannot be found or openned.')
+                STOP 'Error reading eigE_PHP.bin'
             END IF
-            READ(iounit) eigEFull
+            READ(iounit) eigEFull_PHP
             CLOSE(iounit)
 
             ALLOCATE(VdnFull(nv,Nbound))
-            OPEN(NEWUNIT=iounit, FILE='DATA/PHPRydbergStates/Vdn.bin', &
+            OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/Vdn.bin', &
                 FORM='unformatted', STATUS='old', ACTION='read', IOSTAT=istat)
             IF (istat /= 0) THEN
                 CALL CONSOLE('[ERROR]: File Vdn.bin cannot be found or openned.')
@@ -785,7 +682,7 @@ PROGRAM MAIN
             DO i = 1, Nbound
                 WRITE(iounit, '(I3)', advance='no') i
                 DO j = 1, nv 
-                    WRITE(iounit, '(1E20.12)', advance='no') eigEFull(j,i) * phys_h0
+                    WRITE(iounit, '(1E20.12)', advance='no') eigEFull_PHP(j,i) * phys_h0
                 END DO
                 WRITE(iounit,*)
             END DO
@@ -846,17 +743,17 @@ PROGRAM MAIN
                 CALL CONSOLE(message)
                 IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
                 IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-                IF (ALLOCATED(eigE)) DEALLOCATE(eigE)
+                IF (ALLOCATED(eigE_PHP)) DEALLOCATE(eigE_PHP)
                 ALLOCATE(DeltaRydberg(SIZE(e)))
                 ALLOCATE(Vdn(Nbound))
-                ALLOCATE(eigE(Nbound))
+                ALLOCATE(eigE_PHP(Nbound))
                 Vdn(:) = VdnFull(j,:)
-                eigE(:) = eigEFull(j,:)
-                CALL ComputeDeltaRydberg(e, Vdn, eigE, DeltaRydberg)
+                eigE_PHP(:) = eigEFull_PHP(j,:)
+                CALL ComputeDeltaRydberg(e, Vdn, eigE_PHP, DeltaRydberg)
                 DeltaRydbergFull(j,:) = DeltaRydberg
                 IF (ALLOCATED(DeltaRydberg)) DEALLOCATE(DeltaRydberg)
                 IF (ALLOCATED(Vdn)) DEALLOCATE(Vdn)
-                IF (ALLOCATED(eigE)) DEALLOCATE(eigE)      
+                IF (ALLOCATED(eigE_PHP)) DEALLOCATE(eigE_PHP)      
                 WRITE(message, '(A,F0.3,A)') 'Computation of Rydberg-part of Delta for V_A = ', V_A, ' completed.'
                 CALL CONSOLE(message)
             ELSE
@@ -912,9 +809,8 @@ PROGRAM MAIN
         
         
         
-        IF (ALLOCATED(eigEFull)) DEALLOCATE(eigEFull)
+        IF (ALLOCATED(eigEFull_PHP)) DEALLOCATE(eigEFull_PHP)
         IF (ALLOCATED(VdnFull)) DEALLOCATE(VdnFull)
-        IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
         IF (ALLOCATED(DeltaContinuousFull)) DEALLOCATE(DeltaContinuousFull)
         IF (ALLOCATED(DeltaRydbergFull)) DEALLOCATE(DeltaRydbergFull)
         

@@ -12,7 +12,7 @@
 # --- SBATCH Computation settings Settings ---
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=64
 #SBATCH --mem-per-cpu=256M
 
 

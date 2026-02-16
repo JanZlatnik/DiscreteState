@@ -63,11 +63,10 @@ $(TARGET): $(OBJS)
 build/Math.o: build/Parameters.o
 build/Green.o: build/Parameters.o  build/Math.o build/whittaker_w.o build/coulcc.o
 build/DiscreteState.o: build/Parameters.o build/Math.o build/Green.o build/whittaker_w.o build/coulcc.o
-build/RadialShooting.o: build/Parameters.o build/Math.o build/whittaker_w.o 
-build/PHPBound.o: build/Parameters.o build/Math.o build/Green.o build/whittaker_w.o
+build/RydbergSolver.o: build/Parameters.o build/Math.o build/whittaker_w.o build/Green.o
 build/GDTrans.o: build/Parameters.o build/Math.o
 
-build/MAIN.o: build/Parameters.o build/whittaker_w.o build/coulcc.o build/DiscreteState.o build/Green.o build/GDTrans.o build/RadialShooting.o build/PHPBound.o
+build/MAIN.o: build/Parameters.o build/whittaker_w.o build/coulcc.o build/DiscreteState.o build/Green.o build/GDTrans.o build/RydbergSolver.o
 
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.f90

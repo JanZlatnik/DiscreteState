@@ -1,186 +1,251 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.ticker import MaxNLocator
 from matplotlib.ticker import AutoMinorLocator
 import gc
+import os
 
-base_path = r"/work/zlatnikj/DiscreteStateRuns/2D_Test1/DATA"
+base_path = r"./DATAcut"
+output_path = r"./Graphs/PhaseshiftsDefects"
+os.makedirs(output_path, exist_ok=True)
 
 
-potentials = np.linspace(0.7, 10.0, 10)
-shifts = [-2,-2,-1,-1,-1,-1,-1,-1,-1,-1,-1]
+potentials = np.linspace(-0.15, 0.3, 10)
+
+# Shifts
+shifts = [0,0,0,0,0,0,0,0,0,0,0]
+DS_shift = [0,0,0,0,0,0,0,0,0,0,0]
+shifts_H = [0,0,0,0,0,0,0,0,0,0,0]
+shifts_PHP = [1,1,1,1,1,1,1,1,1,1,1]
+
 shifts = np.array(shifts) * np.pi
-aspect_ratio = 'square'
-specific_value = None  # Specifická hodnota, None pro vykreslení všech dat
-filenames = [f"{base_path}/Coulomb/phaseshift.txt",
-             f"{base_path}/Coulomb/DS_phaseshift.txt"]
+DS_shifts = np.array(DS_shift) * np.pi          
+shifts_H = np.array(shifts_H) * np.pi           
+shifts_PHP = np.array(shifts_PHP) * np.pi           
 
-eigefile = f"{base_path}/BoundStates/eigE.txt"
-defectsfile = f"{base_path}/BoundStates/defects.txt"
-dmarker = 'x'
+aspect_ratio = 'square'
+
+# Definice parametrů legendy
+legend_params = {
+    'frameon': False,
+    'ncol': 2,              
+    'fontsize': 10,  
+    'handlelength': 2,
+    'title_fontsize': 10,
+    'loc': 'best',
+    'columnspacing': 1.0,
+    'handletextpad': 0.5
+}
+
+files_lines = [
+    f"{base_path}/DSState/phaseshift.txt",
+    f"{base_path}/DSState/DS_phaseshift.txt",
+    f"{base_path}/DSState/defect.txt",
+    f"{base_path}/DSState/DS_defect.txt"
+]
+
+files_points = [
+    (f"{base_path}/RydbergStates/eigE_H.txt", f"{base_path}/RydbergStates/defects_H.txt"),
+    (f"{base_path}/RydbergStates/eigE_PHP.txt", f"{base_path}/RydbergStates/defects_PHP.txt")
+]
+
+SMALL_SIZE = 14
+MEDIUM_SIZE = 18
+BIGGER_SIZE = 24
+LEGEND_SIZE = 12
+SIZE = 6
+
+X_axis = r'Energy$\,(\mathrm{eV})$'
+Y_axis = r'Phaseshift'
+
+legends = [
+    r'$\delta(E)$', r'$\delta_\mathrm{res}(E)$', r'$\delta_\mathrm{bg}(E)$', 
+    r'$\pi\mu(E)$', r'$\pi\mu_\mathrm{res}(E)$', r'$\pi\mu_\mathrm{bg}(E)$',
+    r'$\pi\mu^H_n$', r'$\pi\mu^{PHP}_n$'
+]
+labels = [0] * 8 
+labels_position = [(0,0)] * 8 
+
+
+colors = ['blue', 'red', 'green', 'purple', 'orange', 'mediumaquamarine', 'magenta', 'midnightblue']
+colorsAll = ['blue', 'red', 'green', 'purple', 'orange', 'mediumaquamarine', 'purple', 'mediumaquamarine']
+markers = [None, None, None, None, None, None, 'x', '+'] 
+line_styles = ['-', '-', '-', '-', '-', '-', '', '']    
+line_widths = [1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 0, 0]
+ms_value = 10  
+mew_value = 1.5  
+ms_value_all = 6
+mew_value_all = 1
+
+ylog = False
+xlog = False
+
+bg_colour = 'green'
+
+limit_x = True 
+limit_y = True 
+x_range = [-12, 12] 
+y_range = [-4.5, 1.0] 
+x_rangeAll = [-12, 12] 
+y_rangeAll = [-5.5, 1.5] 
+minstep_x = False 
+minstep_y = False 
+step_x = 2 
+step_y = 10 
+
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams["font.serif"] = ["Latin Modern Roman"]
+plt.rcParams['mathtext.fontset'] = 'cm'
+
+plt.rcParams['axes.titlepad'] = 10 
+plt.rcParams['axes.labelpad'] = 10 
+plt.rcParams['legend.fancybox'] = False
+plt.rcParams['legend.edgecolor'] = "#000000"
+plt.rcParams["figure.autolayout"] = True
+plt.rcParams["legend.handlelength"] = 3
+plt.rcParams["legend.framealpha"] = 1
+plt.rcParams["legend.borderpad"] = 0.8
+
+plt.rc('font', size=SMALL_SIZE) 
+plt.rc('axes', titlesize=MEDIUM_SIZE) 
+plt.rc('axes', labelsize=MEDIUM_SIZE) 
+plt.rc('xtick', labelsize=SMALL_SIZE) 
+plt.rc('ytick', labelsize=SMALL_SIZE) 
+plt.rc('legend', fontsize=LEGEND_SIZE) 
+plt.rc('figure', titlesize=BIGGER_SIZE) 
+
+if aspect_ratio == 'golden_ratio':
+    golden_ratio = (1 + 5 ** 0.5) / 2
+    fig_all, ax_all = plt.subplots(figsize=(SIZE*golden_ratio, SIZE))
+else:
+    fig_all, ax_all = plt.subplots(figsize=(SIZE, SIZE))
+
 
 for (potindx, VA) in enumerate(potentials):
 
-    # Nastavení základních vlastností grafu
     name = rf'PhaseShiftsDefectsVA={VA:.2f}'
     x_column = 1
-    y_columns = [potindx+2]
-    show_legend = True  # True pro zobrazení, False pro skrytí legendy
-    legend_title = f"$V_A = {VA:.2f}$"  # Nadpis nad legendou, 0 pro skrytí
-    legend_frame = False # Rámeček kolem legendy
+    col_idx = potindx + 1 
+    
+    show_legend = True 
+    legend_title = f"$V_A = {VA:.2f}$" 
+    legend_frame = False 
 
-    # Nastavení velikostí
-    SMALL_SIZE = 14
-    MEDIUM_SIZE = 18
-    BIGGER_SIZE = 24
-    LEGEND_SIZE = 12
-    SIZE = 6
-
-    # Legendy, popisky, barvy a styly čar s escape sekvencemi pro LaTeX
-    X_axis = r'Energy$\,(\mathrm{eV})$'
-    Y_axis = r'Phaseshift'
-    legends = [[r'$\delta(E)$'],[r'$\delta_\mathrm{res}(E)$'],[r'$\delta_\mathrm{bg}(E)$'],[r'$\pi\mu(E)$']]
-    labels = [[0],[0],[0],[0]]
-    labels_position = [[(0,0)],[(0,0)],[(0,0)],[(0,0)]]  
-    colors = [['blue'],['red'],['green'],['purple']]
-    markers = [['o', '^']]
-    line_styles = [['-'],['-'],['-'],['-']]
-    line_widths = [[''],[''],[''],['']]
-    ylog = False
-    xlog = False
-
-    bg_colour = 'green'
-
-    # Nastavení pro omezení os a krokování
-    limit_x = True  # True pro omezení osy X, False pro ponechání plného rozsahu
-    limit_y = True  # True pro omezení osy Y, False pro ponechání plného rozsahu
-    x_range = [-10, 10]  # Rozsah pro omezení osy X
-    y_range = [-2*np.pi-0.1, 0.1]  # Rozsah pro omezení osy Y
-    minstep_x = False  # Zapnutí/vypnutí minimálního kroku na ose X
-    minstep_y = False  # Zapnutí/vypnutí minimálního kroku na ose Y
-    step_x = 2  # Minimální krok na ose X
-    step_y = 10  # Minimální krok na ose Y
-
-
-    # Nastavení LaTeX formátování a fontů
-    #rcParams['text.usetex'] = True
-    #rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
-    #rcParams['font.serif'] = ['Latin Modern Roman']
-    plt.rcParams['font.family'] = 'serif'
-    plt.rcParams["font.serif"] = ["Latin Modern Roman"]
-    plt.rcParams['mathtext.fontset'] = 'cm'
-
-    plt.rcParams['axes.titlepad'] = 10 
-    plt.rcParams['axes.labelpad'] = 10 
-    plt.rcParams['legend.fancybox'] = False
-    plt.rcParams['legend.edgecolor'] = "#000000"
-    plt.rcParams["figure.autolayout"] = True
-    plt.rcParams["legend.handlelength"] = 3
-    plt.rcParams["legend.framealpha"] = 1
-    plt.rcParams["legend.borderpad"] = 0.8
-
-    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    plt.rc('axes', titlesize=MEDIUM_SIZE)    # fontsize of the axes title
-    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('legend', fontsize=LEGEND_SIZE)            # legend fontsize
-    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-
-    # Nastavení velikosti a poměru stran figury
     if aspect_ratio == 'golden_ratio':
         golden_ratio = (1 + 5 ** 0.5) / 2
         fig, ax = plt.subplots(figsize=(SIZE*golden_ratio, SIZE ))
     else:
         fig, ax = plt.subplots(figsize=(SIZE, SIZE))
 
-    # Načtení a vykreslení dat z více souborů
-    for file_idx, filename in enumerate(filenames):
-        data = np.loadtxt(filename, comments='#', delimiter=None)
-        if file_idx == 0:
-            data[:,y_columns[0]-1] = data[:,y_columns[0]-1] + shifts[potindx]
-        x = data[:, x_column-1]
-
-        for col_idx, y_col in enumerate(y_columns):
-            y = data[:, y_col-1]
-            label = legends[file_idx][col_idx]
-            if label:
-                if line_widths[file_idx][col_idx] == '':
-                    line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx])
-                else:
-                    line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx])
-            else:
-                if line_widths[file_idx][col_idx] == '':
-                    line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx])
-                else:
-                    line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx])
-            if labels[file_idx][col_idx] != 0:
-                # Použijeme absolutní hodnoty pro pozici popisků
-                abs_x_pos = labels_position[file_idx][col_idx][0]  # Absolutní pozice na ose X
-                abs_y_pos = labels_position[file_idx][col_idx][1]  # Absolutní pozice na ose Y
-                ax.text(abs_x_pos, abs_y_pos, labels[file_idx][col_idx], color=colors[file_idx][col_idx], verticalalignment='bottom')
-
-
-    data1 = np.loadtxt(filenames[0])
-    data2 = np.loadtxt(filenames[1])
-    x = data1[:,x_column-1]
-    for col_idx, y_col in enumerate(y_columns):
-        y = data1[:,y_col-1]-data2[:,y_col-1] + shifts[potindx]
-        file_idx = 2
-        label = legends[file_idx][col_idx]
-        if label:
-            if line_widths[file_idx][col_idx] == '':
-                line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx])
-            else:
-                line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx])
-        else:
-            if line_widths[file_idx][col_idx] == '':
-                line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx])
-            else:
-                line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx])
-        if labels[file_idx][col_idx] != 0:
-                # Použijeme absolutní hodnoty pro pozici popisků
-                abs_x_pos = labels_position[file_idx][col_idx][0]  # Absolutní pozice na ose X
-                abs_y_pos = labels_position[file_idx][col_idx][1]  # Absolutní pozice na ose Y
-                ax.text(abs_x_pos, abs_y_pos, labels[file_idx][col_idx], color=colors[file_idx][col_idx], verticalalignment='bottom')
-
-
-    x = np.loadtxt(eigefile)[:,potindx+1]
-    y = np.pi * np.loadtxt(defectsfile)[:,potindx+1]
-    file_idx = 3
-    label = legends[file_idx][col_idx]
-    col_idx = 0
-    if label:
-        if line_widths[file_idx][col_idx] == '':
-            line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], marker=dmarker)
-        else:
-            line, = ax.plot(x, y, label=label, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx], marker=dmarker)
+    
+    raw_data = []
+    plot_data_list = [] 
+    
+    loaded_datasets = []
+    
+    for f in files_lines:
+        try:
+            loaded_datasets.append(np.loadtxt(f))
+        except OSError:
+            print(f"Skipping {f} (not found)")
+            loaded_datasets.append(None)
+            
+    if loaded_datasets[0] is not None:
+        y_ps = loaded_datasets[0][:, col_idx] + shifts[potindx]
+        x_ps = loaded_datasets[0][:, 0]
+        plot_data_list.append((x_ps, y_ps))
     else:
-        if line_widths[file_idx][col_idx] == '':
-            line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], marker=dmarker)
+        plot_data_list.append(None)
+
+    if loaded_datasets[1] is not None:
+        y_ds_ps = loaded_datasets[1][:, col_idx] + DS_shifts[potindx]
+        x_ds = loaded_datasets[1][:, 0]
+        plot_data_list.append((x_ds, y_ds_ps))
+    else:
+        plot_data_list.append(None)
+        
+    if loaded_datasets[0] is not None and loaded_datasets[1] is not None:
+        y_ps_bg = y_ps - y_ds_ps
+        plot_data_list.append((x_ps, y_ps_bg))
+    else:
+        plot_data_list.append(None)
+
+    if loaded_datasets[2] is not None:
+        y_def = loaded_datasets[2][:, col_idx] + shifts[potindx]
+        x_def = loaded_datasets[2][:, 0]
+        plot_data_list.append((x_def, y_def))
+    else:
+        plot_data_list.append(None)
+
+    if loaded_datasets[3] is not None:
+        y_ds_def = loaded_datasets[3][:, col_idx] + DS_shifts[potindx]
+        x_ds_def = loaded_datasets[3][:, 0]
+        plot_data_list.append((x_ds_def, y_ds_def))
+    else:
+        plot_data_list.append(None)
+        
+    if loaded_datasets[2] is not None and loaded_datasets[3] is not None:
+        y_def_bg = y_def - y_ds_def
+        plot_data_list.append((x_def, y_def_bg))
+    else:
+        plot_data_list.append(None)
+
+    try:
+        h_eig = np.loadtxt(files_points[0][0])[:, col_idx]
+        h_def = np.loadtxt(files_points[0][1])[:, col_idx]
+        h_def = (h_def * np.pi) + shifts_H[potindx] 
+        plot_data_list.append((h_eig, h_def))
+    except OSError:
+        plot_data_list.append(None)
+    
+    try:
+        php_eig = np.loadtxt(files_points[1][0])[:, col_idx]
+        php_def = np.loadtxt(files_points[1][1])[:, col_idx]
+        php_def = (php_def * np.pi) + shifts_PHP[potindx] 
+        plot_data_list.append((php_eig, php_def))
+    except OSError:
+        plot_data_list.append(None)
+
+
+    for i, data_pair in enumerate(plot_data_list):
+        if data_pair is None:
+            continue
+            
+        xx, yy = data_pair
+        label = legends[i]
+        color = colors[i]
+        ls = line_styles[i]
+        mk = markers[i]
+        lw = line_widths[i]
+        
+        if ls != '':
+            if label:
+                ax.plot(xx, yy, label=label, color=color, linestyle=ls, linewidth=lw)
+            else:
+                ax.plot(xx, yy, color=color, linestyle=ls, linewidth=lw)
         else:
-            line, = ax.plot(x, y, color=colors[file_idx][col_idx], linestyle=line_styles[file_idx][col_idx], linewidth=line_widths[file_idx][col_idx], marker=dmarker)
-    if labels[file_idx][col_idx] != 0:
-            # Použijeme absolutní hodnoty pro pozici popisků
-            abs_x_pos = labels_position[file_idx][col_idx][0]  # Absolutní pozice na ose X
-            abs_y_pos = labels_position[file_idx][col_idx][1]  # Absolutní pozice na ose Y
-            ax.text(abs_x_pos, abs_y_pos, labels[file_idx][col_idx], color=colors[file_idx][col_idx], verticalalignment='bottom')
+            if label:
+                ax.plot(xx, yy, label=label, color=color, marker=mk, linestyle='None', markersize=ms_value, markeredgewidth=mew_value)
+            else:
+                ax.plot(xx, yy, color=color, marker=mk, linestyle='None', markersize=ms_value, markeredgewidth=mew_value)
+                
+        if labels[i] != 0:
+            abs_x_pos = labels_position[i][0]
+            abs_y_pos = labels_position[i][1]
+            ax.text(abs_x_pos, abs_y_pos, labels[i], color=color, verticalalignment='bottom')
+
+        lbl_all = label if (potindx == 0) else None
+        if ls != '':
+            color = colorsAll[i]
+            ax_all.plot(xx, yy, label=lbl_all, color=color, linestyle=ls, linewidth=lw) 
+        else:
+            color = colorsAll[i]
+            ax_all.plot(xx, yy, label=lbl_all, color=color, marker=mk, linestyle='None', markersize=ms_value_all, markeredgewidth=mew_value_all)
 
 
-
-    # Extra funkce fit
-    if False:
-        x_range = np.linspace(np.min(x), np.max(x), 300)
-        f_x = 1/(2*1822.89) * (np.pi/12)**2 * (x_range+11)**2 * 27.2113961
-        ax.plot(x_range, f_x, color='black', linestyle='--', linewidth=1, alpha=0.7)
-        relative_x_position = 0.9  # 0=začátek, 1=konec
-        relative_y_shift = -0.8  # Vertikální posun v procentech rozsahu y
-        label_pos_x = x_range[int(relative_x_position * len(x_range))]
-        label_pos_y = f_x[int(relative_x_position * len(f_x))] + (max(f_x) - min(f_x)) * relative_y_shift
-        ax.text(label_pos_x, label_pos_y, r'$\propto\frac{j^2\pi^2\hbar^2}{2mL^2}$', color='black', verticalalignment='bottom', horizontalalignment='center', alpha=0.7)
-
-    # Nastavení vzhledu grafu
     ax.set_xlabel(X_axis)
     ax.set_ylabel(Y_axis)
     if limit_x:
@@ -190,9 +255,10 @@ for (potindx, VA) in enumerate(potentials):
     ax.set_title('')
     if show_legend:
         if legend_title != 0:
-            ax.legend(frameon=legend_frame, title=legend_title)
+            ax.legend(title=legend_title, **legend_params)
         else:
-            ax.legend(frameon=legend_frame)
+            ax.legend(**legend_params)
+
     ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True, labelbottom=True, length = 6)
     ax.tick_params(axis='y', direction='in', which='both', left=True, right=True, labelleft=True, length = 6)
     ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -213,4 +279,24 @@ for (potindx, VA) in enumerate(potentials):
         if minstep_y:
             ax.yaxis.set_major_locator(plt.MultipleLocator(step_y))
 
-    fig.savefig(rf'2D/Defects/{name}.pdf', format='pdf')
+    fig.savefig(rf'{output_path}/{name}.pdf', format='pdf')
+    
+    plt.close(fig)
+    gc.collect()
+
+
+ax_all.set_xlabel(X_axis)
+ax_all.set_ylabel(Y_axis)
+if limit_x: ax_all.set_xlim(x_rangeAll)
+if limit_y: ax_all.set_ylim(y_rangeAll)
+
+ax_all.legend(**legend_params)
+
+ax_all.tick_params(axis='both', direction='in', which='both', top=True, right=True, length=6)
+ax_all.xaxis.set_minor_locator(AutoMinorLocator())
+ax_all.yaxis.set_minor_locator(AutoMinorLocator())
+ax_all.grid(False)
+
+fig_all.savefig(rf'{output_path}/PhaseshiftDefectsAll.pdf', format='pdf')
+plt.close(fig_all)
+gc.collect()

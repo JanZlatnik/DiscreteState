@@ -28,10 +28,9 @@ MODULE Parameters
     
     
     ! Computational settings
-    LOGICAL, PARAMETER                  :: Rydbergstates = .TRUE.
-    LOGICAL, PARAMETER                  :: PHPRydbergstates = .FALSE.
-    LOGICAL, PARAMETER                  :: dstate_computation = .FALSE.
-    LOGICAL, PARAMETER                  :: hilbert_computation = .FALSE.
+    LOGICAL, PARAMETER                  :: RydbergStates = .FALSE.
+    LOGICAL, PARAMETER                  :: dstate_computation = .TRUE.
+    LOGICAL, PARAMETER                  :: hilbert_computation = .TRUE.
     
         
     LOGICAL, PARAMETER                  :: unwrap = .TRUE.
@@ -45,21 +44,19 @@ MODULE Parameters
     REAL(KIND = idk), PARAMETER         :: Z = 1.0d0                    ! strenght of Coulombic potential, i.e. Z/r
 
     ! Bound state parameters
-    INTEGER, PARAMETER          :: max_iter = 60                        ! maximum number of bisections on a test grid
-    INTEGER, PARAMETER          :: max_iter2 = 50                       ! maximum number of bisections in defect convergence process
-    REAL(KIND = idk), PARAMETER :: mueps = 1.0d-6                       ! threshold for defect convergence before fitting muint + B/n^2 
-    INTEGER, PARAMETER          :: N_fit_min_n = 100                    ! threshold for minimal number of states computed before fitting
-    INTEGER, PARAMETER          :: N_fit_points = 15                    ! number of fitted points
-    INTEGER, PARAMETER          :: NperN = 400                          ! number of test grid points per expected state
+    INTEGER, PARAMETER          :: max_iter = 100                       ! maximum number of bisections on a test grid
+    INTEGER, PARAMETER          :: max_iter2 = 100                      ! maximum number of bisections in defect convergence process
+    INTEGER, PARAMETER          :: N_fit_points = 10                    ! number of fitted points
+    INTEGER, PARAMETER          :: NperN = 300                          ! number of test grid points per expected state
     REAL(KIND = idk), PARAMETER :: gridtail = 1.0d0                     ! tail size for test grid
-    REAL(KIND = idk), PARAMETER :: Ebound_min = -0.18d0                  ! minimum energy in test grid
+    REAL(KIND = idk), PARAMETER :: Ebound_min = -0.5d0                  ! minimum energy in test grid
     INTEGER, PARAMETER          :: Nbound = 200                         ! number of bound states explicitely calculated
-    INTEGER, PARAMETER          :: Nstart = 10                          ! number of bound states computed on test grid
+    INTEGER, PARAMETER          :: Nstart = 50                          ! number of bound states computed on test grid
     INTEGER, PARAMETER          :: Nprint = 50                          ! number of wavefucntions of bound states printed
     
     ! Mesh settings
     REAL(KIND = idk), PARAMETER :: xmin = 1.0d-10         ! in [au]
-    REAL(KIND = idk), PARAMETER :: xmax = 14.0d0          ! in [au]
+    REAL(KIND = idk), PARAMETER :: xmax = 15.0d0          ! in [au]
     INTEGER, PARAMETER          :: mp = 3000
     
     ! Energy mesh settings
@@ -137,7 +134,6 @@ MODULE Parameters
         
         WRITE(unit,*) ""
         WRITE(unit,'(A35,1X,L1)') "RydbergStates:", Rydbergstates 
-        WRITE(unit,'(A35,1X,L1)') "PHPRydbergStates:", PHPRydbergstates
         WRITE(unit,'(A35,1X,L1)') "dstate_computation:", dstate_computation
         WRITE(unit,'(A35,1X,L1)') "hilbert_computation:", hilbert_computation
         WRITE(unit,*) ""
@@ -173,8 +169,6 @@ MODULE Parameters
         WRITE(unit,*) "[Bound states settings]"
         WRITE(unit,'(A25,1X,I0)') "max_iter:", max_iter
         WRITE(unit,'(A25,1X,I0)') "max_iter2:", max_iter2
-        WRITE(unit,'(A25,1X,E0.6)') "mueps:", mueps
-        WRITE(unit,'(A25,1X,I0)') "N_fit_min_n:", N_fit_min_n
         WRITE(unit,'(A25,1X,I0)') "N_fit_points:", N_fit_points
         WRITE(unit,'(A25,1X,I0)') "NperN:", NperN
         WRITE(unit,'(A25,1X,F0.6)') "gridtail:", gridtail
