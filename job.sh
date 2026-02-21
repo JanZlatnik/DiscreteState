@@ -7,7 +7,7 @@
 
 # --- SBATCH Partition Settings ---
 #SBATCH --partition=ffa
-#SBATCH --time=11:59:00
+#SBATCH --time=03:59:00
 
 # --- SBATCH Computation settings Settings ---
 #SBATCH --nodes=1

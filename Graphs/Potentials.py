@@ -8,22 +8,34 @@ from matplotlib.ticker import AutoMinorLocator
 import gc
 import os
 
-def get_harmonic_parameters(VA):
-    r0 = 0.0     
-    Omega = 1.0              
-    V0 = - 1.5 + VA 
-    return r0, Omega, V0
+import sys
+import argparse
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+import settings
+parser = argparse.ArgumentParser(description="Script for generating plots.")
+parser.add_argument('--model', type=str, default='2DModel', help='Select the calculation mode defined in settings.py')
+args = parser.parse_args()
+if args.model not in settings.MODELS:
+    print(f"\n[ERROR] Mode '{args.model}' is not defined in settings.py!")
+    print(f"Available modes: {list(settings.MODELS.keys())}\n")
+    sys.exit(1)
+cfg = settings.MODELS[args.model]
+print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
+VA_name = cfg.get('legend_variable_name', 'R')
+
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/Potentials"
 os.makedirs(output_path, exist_ok=True)
 
-potentials = np.linspace(-0.15, 0.3, 10)
+potentials = cfg['potentials']
 aspect_ratio = 'square'
 
 HARTREE_EV = 27.211386
-Z = 1.0
-l = 0
+Z = cfg['Potentials_Z']
+l = cfg['Potentials_l']
 mask_start = 5  
 
 legend_params = {
@@ -43,15 +55,15 @@ BIGGER_SIZE = 24
 LEGEND_SIZE = 12
 SIZE = 6
 
-X_axis = r'Radial coordinate$\,(a_0)$'
+X_axis = r'Radial Coordinate$\,(a_0)$'
 Y_axis_V = r'Potential$\,(\mathrm{eV})$'
-Y_axis_Psi = r'Discrete state wavefunction$\,(\mathrm{u.a.})$'
+Y_axis_Psi = r'Discrete State Wavefunction$\,(\mathrm{u.a.})$'
 
 limit_x = True 
 limit_y_V = True 
-x_range = [0, 10] 
-y_range_V = [-50, 50]    
-y_range_Psi = [-3, 3] 
+x_range = cfg['Potentials_x_range'] 
+y_range_V = cfg['Potentials_y_range_V']    
+y_range_scale = cfg['Potentials_y_range_scale']
 
 color_V = 'green'
 color_Asy = 'purple'
@@ -84,12 +96,16 @@ if aspect_ratio == 'golden_ratio':
 else:
     fig_all, ax_all = plt.subplots(figsize=(SIZE, SIZE))
 
+ds_energies = np.loadtxt(f"{base_path}/DSState/DSenergies.txt", usecols=(1,))
+
 
 for (potindx, VA) in enumerate(potentials):
 
-    name = rf'Potential_VA={VA:.2f}'
+    name = rf'Potential_{VA_name}={VA:.2f}'
     col_idx = potindx + 1 
-    legend_title = f"$V_A = {VA:.2f}$"
+    legend_title = f"${VA_name} = {VA:.2f}$"
+
+    e_ds = ds_energies[potindx]
 
     try:
         data_V = np.loadtxt(f"{base_path}/DSState/V.txt")
@@ -99,7 +115,7 @@ for (potindx, VA) in enumerate(potentials):
         r_plot = r_V[mask_start:]
         V_plot = V_vals[mask_start:]
     except OSError:
-        print(f"Skipping V.txt for VA={VA}")
+        print(f"Skipping V.txt for {VA_name}={VA}")
         continue
 
     try:
@@ -111,7 +127,7 @@ for (potindx, VA) in enumerate(potentials):
 
     V_asy = (-Z/r_plot + (l*(l+1))/(2 * r_plot**2)) * HARTREE_EV
 
-    r0, Omega, V0 = get_harmonic_parameters(VA)
+    r0, Omega, V0 = cfg['Potentials_harmonic_params'](VA)
     V_harm_au = V0 + 0.5 * (Omega**2) * ((r_plot - r0)**2)
     V_harm = V_harm_au * HARTREE_EV
 
@@ -136,7 +152,10 @@ for (potindx, VA) in enumerate(potentials):
         ax2.fill_between(r_psi, 0, psi_vals, color=color_Psi, alpha=0.1) 
     
     ax2.set_ylabel(Y_axis_Psi)
-    if limit_y_V: ax2.set_ylim(y_range_Psi) 
+    if limit_y_V: 
+        V_min, V_max = y_range_V
+        frac = (e_ds - V_min) / (V_max - V_min)
+        ax2.set_ylim([-frac * y_range_scale, (1-frac) * y_range_scale]) 
 
     # Sjednocená legenda pomocí dummy lines na ax1
     lines = []
@@ -151,9 +170,14 @@ for (potindx, VA) in enumerate(potentials):
         labels.append(r'$\phi_d(r)$')
 
     ax1.legend(lines, labels, title=legend_title, **legend_params)
-
-    ax1.tick_params(axis='both', direction='in', which='both', top=True, length=6)
-    ax2.tick_params(axis='y', direction='in', which='both', right=True, length=6)
+    ax1.xaxis.set_minor_locator(AutoMinorLocator())
+    ax1.yaxis.set_minor_locator(AutoMinorLocator())
+    ax2.xaxis.set_minor_locator(AutoMinorLocator())
+    ax2.yaxis.set_minor_locator(AutoMinorLocator())
+    ax1.tick_params(axis='both', direction='in', which='major', top=True, length=6)
+    ax2.tick_params(axis='y', direction='in', which='major', right=True, length=6)
+    ax1.tick_params(axis='both', direction='in', which='minor', top=True, length=3)
+    ax2.tick_params(axis='y', direction='in', which='minor', right=True, length=3)
     ax1.xaxis.set_minor_locator(AutoMinorLocator())
     ax1.yaxis.set_minor_locator(AutoMinorLocator())
     ax2.yaxis.set_minor_locator(AutoMinorLocator())
@@ -178,10 +202,13 @@ if limit_y_V: ax_all.set_ylim(y_range_V)
 lines_all = [
     plt.Line2D([], [], color=color_V, linestyle='-', linewidth=1.2),
 ]
-labels_all = [r'$V(r)$', r'$V_\mathrm{asy}(r)$']
+labels_all = [r'$V(r)$']
 ax_all.legend(lines_all, labels_all, **legend_params)
 
-ax_all.tick_params(axis='both', direction='in', which='both', top=True, right=True, length=6)
+ax_all.xaxis.set_minor_locator(AutoMinorLocator())
+ax_all.yaxis.set_minor_locator(AutoMinorLocator())
+ax_all.tick_params(axis='both', direction='in', which='major', top=True, right=True, length=6)
+ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=True, length=3)
 ax_all.xaxis.set_minor_locator(AutoMinorLocator())
 ax_all.yaxis.set_minor_locator(AutoMinorLocator())
 

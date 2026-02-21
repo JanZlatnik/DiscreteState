@@ -18,7 +18,7 @@ MODULE RydbergSolver
     USE OMP_LIB
     IMPLICIT NONE
     PRIVATE
-    PUBLIC :: ComputeRydbergSystem, ComputeVdn, rydberg_grid
+    PUBLIC :: ComputeRydbergSystem, ComputeVdn, rydberg_grid, compute_dstate
 
     ! Interface for R->R potential V(x)
     ABSTRACT INTERFACE
@@ -105,6 +105,7 @@ MODULE RydbergSolver
         REAL(KIND = idk), ALLOCATABLE       :: overlapstate(:)
         REAL(KIND = idk)                    :: dx
         INTEGER :: i, Nmin
+        CHARACTER(LEN=256) :: message
         
         dx = ABS(x(2)-x(1))
         
@@ -121,6 +122,15 @@ MODULE RydbergSolver
         DEALLOCATE(overlapstate)
         
         overlap = TANH(overlap)
+
+        IF (ieee_is_nan(overlap)) THEN
+            !$OMP CRITICAL
+            WRITE(message, '(A, G0.6)') '[WARNING]: calc_PHP_overlap resulted in NaN at E = ', E
+            CALL CONSOLE(message)
+            !$OMP END CRITICAL
+        END IF
+
+        
         
     END SUBROUTINE calc_PHP_overlap
 
@@ -358,6 +368,9 @@ MODULE RydbergSolver
         H_defects_work = 0.0d0
 
         ALLOCATE(eigE_H(Ntotal), eigE_PHP(Ntotal), eigFunc_PHP(SIZE(x), Ntotal), defects_H(Ntotal), defects_PHP(Ntotal))
+        eigE_PHP = ieee_value(0.0d0, ieee_quiet_nan)
+        defects_PHP = ieee_value(0.0d0, ieee_quiet_nan)
+        eigFunc_PHP = 0.0d0
         
         CALL CONSOLE('=================================================')
         CALL CONSOLE('      RYDBERG SOLVER (Unified H & PHP)           ')
@@ -515,7 +528,7 @@ MODULE RydbergSolver
             width = ABS(EH_R - EH_L)
 
             eps = MIN(machine_eps_factor * EPSILON(EH_L) * ABS(EH_L), width_eps_factor * width)
-            DO i = 1,30
+            DO i = 1,200
                 E_PHP_L = EH_L + eps
                 CALL calc_PHP_overlap(x, SIZE(x), dstate, E_PHP_L, m, l, potential, Z, f_check_L)
 
@@ -525,23 +538,28 @@ MODULE RydbergSolver
                     eps = eps * 0.7d0
                 END IF
 
-                IF (eps < 5.0d0 * EPSILON(EH_L) * ABS(EH_L)) THEN
+                IF (eps < 1.0d0 * EPSILON(EH_L) * ABS(EH_L)) THEN
                     f_check_L = -1.0d0 
                     EXIT
                 END IF
             END DO
 
             IF (f_check_L <= 0.0d0) THEN
-                 eigE_PHP(k) = ieee_value(0.0d0, ieee_quiet_nan)
                 !$OMP CRITICAL
-                WRITE(message, '(A,I0,A)') '[ERROR]: Sticky PHP state n=', k, ' (Left). Failed to bracket positive value.'
+                WRITE(message, '(A,I0,A,I0,A)') '[INFO]: PHP state n=', k, ' coincides with H-pole n=', k, '.'
                 CALL CONSOLE(message)
                 !$OMP END CRITICAL
-                 CYCLE 
+
+                eigE_PHP(k) = EH_L
+                defects_PHP(k) = H_defects_work(k)
+                CALL calc_PHP_normstates(x, dstate, eigE_PHP(k), m, l, potential, Z, psi_tmp)
+                eigFunc_PHP(:,k) = psi_tmp(:)
+                DEALLOCATE(psi_tmp)
+                CYCLE 
             END IF
 
             eps = MIN(machine_eps_factor * EPSILON(EH_R) * ABS(EH_R), width_eps_factor * width)
-            DO i = 1,30
+            DO i = 1,200
                 E_PHP_R = EH_R - eps
                 CALL calc_PHP_overlap(x, SIZE(x), dstate, E_PHP_R, m, l, potential, Z, f_check_R)
 
@@ -551,19 +569,24 @@ MODULE RydbergSolver
                     eps = eps * 0.7d0
                 END IF
 
-                IF (eps < 5.0d0 * EPSILON(EH_R) * ABS(EH_R)) THEN
+                IF (eps < 1.0d0 * EPSILON(EH_R) * ABS(EH_R)) THEN
                     f_check_R = 1.0d0 
                     EXIT
                 END IF
             END DO
 
             IF (f_check_R >= 0.0d0) THEN
-                 eigE_PHP(k) = ieee_value(0.0d0, ieee_quiet_nan)
-                    !$OMP CRITICAL
-                    WRITE(message, '(A,I0,A)') '[ERROR]: Sticky PHP state n=', k, ' (Right). Failed to bracket positive value.'
-                    CALL CONSOLE(message)
-                    !$OMP END CRITICAL
-                 CYCLE 
+                !$OMP CRITICAL
+                WRITE(message, '(A,I0,A,I0,A)') '[INFO]: PHP state n=', k, ' coincides with H-pole n=', k+1, '.'
+                CALL CONSOLE(message)
+                !$OMP END CRITICAL
+                
+                eigE_PHP(k) = EH_R
+                defects_PHP(k) = H_defects_work(k+1) - 1.0d0
+                CALL calc_PHP_normstates(x, dstate, eigE_PHP(k), m, l, potential, Z, psi_tmp)
+                eigFunc_PHP(:,k) = psi_tmp(:)
+                DEALLOCATE(psi_tmp)
+                CYCLE
             END IF
 
 
@@ -602,6 +625,141 @@ MODULE RydbergSolver
 
 
     END SUBROUTINE ComputeRydbergSystem
+
+
+
+
+
+    SUBROUTINE compute_dstate(x, m, l, Z, V_asymptotic, Emin_guess, dstate, e_asympt, info_dstate)
+        REAL(KIND = idk), INTENT(IN)                            :: x(:), m, Z, Emin_guess
+        INTEGER, INTENT(IN)                                     :: l
+        PROCEDURE(potential_interface), POINTER, INTENT(IN)     :: V_asymptotic
+        REAL(KIND = idk), ALLOCATABLE, INTENT(OUT)              :: dstate(:)
+        REAL(KIND = idk), INTENT(OUT)                           :: e_asympt
+        INTEGER, INTENT(OUT)                                    :: info_dstate
+        
+        REAL(KIND = idk) :: E_curr, E_next, f_curr, f_next, dE
+        REAL(KIND = idk) :: E_L, E_R, E_mid, f_L, f_mid, norm, norm_tail, dx
+        INTEGER          :: i, N
+        REAL(KIND = idk), ALLOCATABLE :: psi_tmp(:), normstate(:)
+        CHARACTER(LEN=256) :: message
+        
+        REAL(KIND = idk) :: k_num, eta, R_match, w_match, w_deriv
+        INTEGER          :: sf_match, sf_curr
+        REAL(KIND = idk) :: A_scale_sq, r_curr, w_curr, term, term_prev, dr_adaptive
+        REAL(KIND = idk) :: R_turn, E_kin_local, V_coul, local_k
+        LOGICAL          :: tail_converged
+        REAL(KIND = idk), PARAMETER :: eps = 1.0d-30
+
+        N = SIZE(x)
+        dx = ABS(x(2) - x(1))
+        dE = ABS(Emin_guess) * 5.0d-3 / m 
+        E_curr = Emin_guess
+        
+        CALL calc_H_logder_diff(x, E_curr, m, l, V_asymptotic, Z, f_curr)
+
+        DO
+            E_next = E_curr + dE
+            IF (E_next >= 0.0d0) THEN
+                CALL CONSOLE('[ERROR]: No bound state found for in dstate initialization!')
+                info_dstate = -1
+                e_asympt = ieee_value(0.0d0, ieee_quiet_nan)
+                RETURN
+            END IF
+            
+            CALL calc_H_logder_diff(x, E_next, m, l, V_asymptotic, Z, f_next)
+            IF (f_curr * f_next <= 0.0d0) THEN
+                E_L = E_curr; E_R = E_next; f_L = f_curr
+                EXIT
+            END IF
+            E_curr = E_next
+            f_curr = f_next
+        END DO
+
+        DO i = 1, max_iter * 2
+            E_mid = 0.5d0 * (E_L + E_R)
+            CALL calc_H_logder_diff(x, E_mid, m, l, V_asymptotic, Z, f_mid)
+            IF (f_L * f_mid <= 0.0d0) THEN
+                E_R = E_mid
+            ELSE
+                E_L = E_mid; f_L = f_mid
+            END IF
+        END DO
+        e_asympt = 0.5d0 * (E_L + E_R)
+
+        CALL calc_H_wavefunction(x, e_asympt, m, l, V_asymptotic, psi_tmp)
+        
+        ALLOCATE(normstate(N))
+        DO i = 1, N
+            normstate(i) = psi_tmp(i)**2
+        END DO
+        CALL definite_integral(normstate, dx, norm)
+        DEALLOCATE(normstate)
+        
+        k_num = SQRT(2.0d0 * m * ABS(e_asympt)) / hbar
+        eta = - Z * m / (hbar**2 * k_num)
+        R_match = x(N)
+        
+        CALL coulomb_whittaker(eta, l, k_num * R_match, w_match, w_deriv, sf_match)
+        A_scale_sq = (psi_tmp(N) / w_match) ** 2
+        
+        R_turn = Z / ABS(e_asympt)
+        norm_tail = 0.0d0
+        r_curr = R_match
+        tail_converged = .FALSE.
+        term_prev = w_match ** 2
+        dr_adaptive = dx
+        
+        DO WHILE (.NOT. tail_converged)
+            V_coul = - Z / r_curr
+            E_kin_local = e_asympt - V_coul
+
+            IF (E_kin_local > 0.0d0) THEN
+                local_k = SQRT(2.0d0 * m * E_kin_local) / hbar
+                IF(local_k > 1.0d-10) THEN
+                    dr_adaptive = 2.0d0 * PI / local_k / 1000.0d0
+                ELSE
+                    dr_adaptive = dr_adaptive * 1.1d0
+                END IF
+            ELSE
+                dr_adaptive = dr_adaptive * 1.05d0
+            END IF
+                
+            dr_adaptive = MAX(dr_adaptive, dx)
+            r_curr = r_curr + dr_adaptive
+
+            CALL coulomb_whittaker(eta, l, k_num * r_curr, w_curr, w_deriv, sf_curr)
+            term = w_curr ** 2 * (10.0d0) ** (2*(sf_curr - sf_match))
+            norm_tail = norm_tail + 0.5d0 * (term + term_prev) * dr_adaptive
+            term_prev = term
+            
+            IF (r_curr > MAX(R_turn, R_match) ) THEN 
+                IF (term < eps * norm_tail) tail_converged = .TRUE.
+            END IF
+            
+            IF (r_curr > 100.0d0 * MAX(R_turn, R_match)) THEN
+                WRITE(message, '(A)') '[ERROR]: Normalization of dstate tail did not converge!'
+                CALL CONSOLE(message)
+                info_dstate = -1
+                RETURN
+            END IF
+        END DO
+        
+        norm_tail = norm_tail * A_scale_sq
+        norm = SQRT(ABS(norm + norm_tail))
+        
+        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
+        ALLOCATE(dstate(N))
+        DO i = 1, N
+            dstate(i) = psi_tmp(i) / norm
+        END DO
+        DEALLOCATE(psi_tmp)
+
+        WRITE(message, '(A,G0.8,A)') ' -> dstate found at energy E = ', e_asympt*phys_h0, ' eV'
+        info_dstate = 0
+        CALL CONSOLE(message)
+
+    END SUBROUTINE compute_dstate
         
 
 

@@ -8,13 +8,30 @@ from matplotlib.ticker import AutoMinorLocator
 import gc
 import os
 
+import sys
+import argparse
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+import settings
+parser = argparse.ArgumentParser(description="Script for generating plots.")
+parser.add_argument('--model', type=str, default='2DModel', help='Select the calculation mode defined in settings.py')
+args = parser.parse_args()
+if args.model not in settings.MODELS:
+    print(f"\n[ERROR] Mode '{args.model}' is not defined in settings.py!")
+    print(f"Available modes: {list(settings.MODELS.keys())}\n")
+    sys.exit(1)
+cfg = settings.MODELS[args.model]
+print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
+VA_name = cfg.get('legend_variable_name', 'R')
+
 base_path = r"./DATAcut"
 output_path = r"./Graphs/HilbertTransform"
 os.makedirs(output_path, exist_ok=True)
 
-plot_gamma = False
+plot_gamma = cfg.get('Hilbert_plot_gamma', False)
 
-potentials = np.linspace(-0.15, 0.3, 10)
+potentials = cfg['potentials']
 aspect_ratio = 'square'
 
 # Definice parametrů legendy
@@ -83,11 +100,11 @@ else:
 for (potindx, VA) in enumerate(potentials):
 
     # Nastavení základních vlastností grafu
-    name = rf'Hilbert10VA={VA:.2f}'
+    name = rf'Hilbert_{VA_name}={VA:.2f}'
     x_column = 1
     y_columns = [potindx+2]
     show_legend = True 
-    legend_title = f"$V_A = {VA:.2f}$" 
+    legend_title = f"${VA_name} = {VA:.2f}$" 
     
     # Nastavení velikostí
     SMALL_SIZE = 14
@@ -109,12 +126,8 @@ for (potindx, VA) in enumerate(potentials):
     # Nastavení pro omezení os a krokování
     limit_x = True 
     limit_y = True 
-    x_range = [-10, 10] 
-    y_range = [-4.1, 4] 
-    minstep_x = False 
-    minstep_y = False 
-    step_x = 1 
-    step_y = 10 
+    x_range = cfg['Hilbert_x_range']
+    y_range = cfg['Hilbert_y_range'] 
 
 
     # Nastavení LaTeX formátování a fontů
@@ -207,12 +220,12 @@ for (potindx, VA) in enumerate(potentials):
     if show_legend:
         ax.legend(title=legend_title, **legend_params)
             
-    ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True, labelbottom=True, length = 6)
-    ax.tick_params(axis='y', direction='in', which='both', left=True, right=True, labelleft=True, length = 6)
     ax.xaxis.set_minor_locator(AutoMinorLocator())
     ax.yaxis.set_minor_locator(AutoMinorLocator())
-    ax.tick_params(axis='x', direction='in', which='minor', top=True, bottom=True, labelbottom=True, length = 2)
-    ax.tick_params(axis='y', direction='in', which='minor', left=True, right=True, labelleft=True, length = 2)
+    ax.tick_params(axis='x', direction='in', which='major', top=True, bottom=True, labelbottom=True, length = 6)
+    ax.tick_params(axis='y', direction='in', which='major', left=True, right=True, labelleft=True, length = 6)
+    ax.tick_params(axis='x', direction='in', which='minor', top=True, bottom=True, labelbottom=True, length = 3)
+    ax.tick_params(axis='y', direction='in', which='minor', left=True, right=True, labelleft=True, length = 3)
     ax.grid(False)
     if ylog:
         ax.set_yscale('log')
@@ -220,12 +233,8 @@ for (potindx, VA) in enumerate(potentials):
         ax.set_xscale('log')
     if limit_x:
         ax.set_xlim(x_range)
-        if minstep_x:
-            ax.xaxis.set_major_locator(plt.MultipleLocator(step_x))
     if limit_y:
         ax.set_ylim(y_range)
-        if minstep_y:
-            ax.yaxis.set_major_locator(plt.MultipleLocator(step_y))
 
     fig.savefig(f'{output_path}/{name}.pdf', format='pdf')
     plt.close(fig)
@@ -240,9 +249,10 @@ if limit_y: ax_all.set_ylim(y_range)
 
 ax_all.legend(**legend_params)
 
-ax_all.tick_params(axis='both', direction='in', which='both', top=True, right=True, length=6)
 ax_all.xaxis.set_minor_locator(AutoMinorLocator())
 ax_all.yaxis.set_minor_locator(AutoMinorLocator())
+ax_all.tick_params(axis='both', direction='in', which='major', top=True, right=True, length=6)
+ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=True, length=3)
 ax_all.grid(False)
 
 fig_all.savefig(f'{output_path}/HilbertAll.pdf', format='pdf')

@@ -30,10 +30,11 @@ MODULE Parameters
     ! Computational settings
     LOGICAL, PARAMETER                  :: RydbergStates = .FALSE.
     LOGICAL, PARAMETER                  :: dstate_computation = .TRUE.
-    LOGICAL, PARAMETER                  :: hilbert_computation = .TRUE.
+    LOGICAL, PARAMETER                  :: hilbert_computation = .FALSE.
     
         
     LOGICAL, PARAMETER                  :: unwrap = .TRUE.
+    LOGICAL, PARAMETER                  :: dstate_boundstate = .TRUE.   
     
     
     
@@ -56,13 +57,13 @@ MODULE Parameters
     
     ! Mesh settings
     REAL(KIND = idk), PARAMETER :: xmin = 1.0d-10         ! in [au]
-    REAL(KIND = idk), PARAMETER :: xmax = 15.0d0          ! in [au]
-    INTEGER, PARAMETER          :: mp = 3000
+    REAL(KIND = idk), PARAMETER :: xmax = 12.0d0          ! in [au]
+    INTEGER, PARAMETER          :: mp = 4000
     
     ! Energy mesh settings
-    REAL(KIND = idk), PARAMETER :: Emin = -4000.0d0/phys_h0       ! [eV] to [au]
-    REAL(KIND = idk), PARAMETER :: Emax = 4000.0d0/phys_h0        ! [eV] to [au]
-    INTEGER, PARAMETER          :: ep = 10000000
+    REAL(KIND = idk), PARAMETER :: Emin = -13.0d0/phys_h0       ! [eV] to [au]
+    REAL(KIND = idk), PARAMETER :: Emax = 0.0d0/phys_h0        ! [eV] to [au]
+    INTEGER, PARAMETER          :: ep = 500000
 
     ! Other parameters
     REAL(KIND = idk), PARAMETER :: m = 1.0d0        ! mass in [au]
@@ -114,12 +115,15 @@ MODULE Parameters
 
     FUNCTION cutoff_energy(l) RESULT(Ecut)
         INTEGER, INTENT(IN) :: l
-        REAL(KIND = idk) :: Ecut
+        REAL(KIND = idk) :: Ecut, C_limit
+        REAL(KIND = idk), PARAMETER :: max_exp = 14.0d0 * LOG(10.0d0)
         IF (l == 0) THEN
             Ecut = -1.0d0
         ELSE
             Ecut = -1.0d0 / (2.0d0 * REAL(l, KIND=idk)**2)
         END IF
+        C_limit = (max_exp**2) / (8.0d0 * m)
+        !Ecut = MAX(Ecut, - C_limit / xmax**2 )
     END FUNCTION cutoff_energy
     
     
@@ -136,6 +140,7 @@ MODULE Parameters
         WRITE(unit,'(A35,1X,L1)') "RydbergStates:", Rydbergstates 
         WRITE(unit,'(A35,1X,L1)') "dstate_computation:", dstate_computation
         WRITE(unit,'(A35,1X,L1)') "hilbert_computation:", hilbert_computation
+        WRITE(unit,'(A35,1X,L1)') "dstate_boundstate:", dstate_boundstate
         WRITE(unit,*) ""
 
         

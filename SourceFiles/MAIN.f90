@@ -21,18 +21,18 @@ PROGRAM MAIN
     REAL(KIND = idk), ALLOCATABLE :: Delta(:), Gamma2(:), DeltaA(:), Gamma2A(:), Phaseshift(:), DS_phaseshift(:), Vde(:)
     REAL(KIND = idk), ALLOCATABLE :: DeltaFull(:,:), Gamma2Full(:,:), DeltaAFull(:,:), Gamma2AFull(:,:), PhaseshiftFull(:,:), DS_phaseshiftFull(:,:), VdeFull(:,:)
     REAL(KIND = idk), ALLOCATABLE :: DeltaContinuous(:), DeltaContinuousFull(:,:), DeltaRydbergFull(:,:), DeltaRydberg(:)
-    REAL(KIND = idk), ALLOCATABLE :: dstate(:,:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:), DSenergies(:)
+    REAL(KIND = idk), ALLOCATABLE :: dstate_bound(:), dstate(:,:), freestate(:), moddedfreestate(:), realscatstate(:), xext(:), psi_R(:), psi_I(:), k2(:), wvalues(:), wdvalues(:), DSenergies(:)
     REAL(KIND = idk), ALLOCATABLE :: boundEgrid(:), eigEFull_H(:,:), defects_H(:,:), defect_H(:), logdevsFull(:,:), logdevs(:), eigE_H(:)
     REAL(KIND = idk), ALLOCATABLE :: eigEFull_PHP(:,:), defects_PHP(:,:), eigE_PHP(:), eigFunc(:,:), defect_PHP(:)
     REAL(KIND = idk), ALLOCATABLE :: VdnFull(:,:), Vdn(:)
     COMPLEX(KIND = idk), ALLOCATABLE :: cmplxscatstate(:)
     INTEGER :: status, iounit, i, j, Negrid, jj, Nfull, l
-    REAL(KIND = idk) :: dx, dE, dV, norm, k, x_cut, wronski, h, Ascale
+    REAL(KIND = idk) :: dx, dE, dV, norm, k, x_cut, wronski, h, Ascale, E_dstate_asymptotic
     CHARACTER(LEN=256) :: message
     REAL(KIND=idk) :: xxx, eta, w, wd
     COMPLEX(KIND=idk) :: XX, ETA1, ZLMIN
     COMPLEX(KIND=idk), DIMENSION(1) :: FC, GC, FCP, GCP, SIG
-    INTEGER :: NL, MODE1, KFN, IFAIL, sf, sfscale
+    INTEGER :: NL, MODE1, KFN, IFAIL, sf, sfscale, status_dstate
     CHARACTER(LEN=200) :: filename
     INTEGER :: istat
 
@@ -46,11 +46,12 @@ PROGRAM MAIN
         END FUNCTION real_function_interface
     END INTERFACE 
 
-    PROCEDURE(real_function_interface), POINTER :: V_ptr, dstate_ptr
+    PROCEDURE(real_function_interface), POINTER :: V_ptr, V_asymptotic_ptr, dstate_ptr
 
 
 
     V_ptr => V_2D
+    V_asymptotic_ptr => V_2D_asymptotic
     dstate_ptr => dstate2D
     
 
@@ -86,6 +87,34 @@ PROGRAM MAIN
         CALL CONSOLE('Directory "DATA" created successfully.')
     ELSE IF (status == -1) THEN
         CALL CONSOLE('Directory "DATA" already exists.')
+    END IF
+
+
+    ! Creating initial discrete state
+    IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
+    ALLOCATE(dstate(nv,SIZE(x)))
+    IF (dstate_boundstate) THEN
+        CALL compute_dstate(x, m, l_ang, Z, V_asymptotic_ptr, 2.0d0*Ebound_min, dstate_bound, E_dstate_asymptotic, status_dstate)
+        IF (status_dstate < 0) THEN
+            CALL CONSOLE('[ERROR]: Discrete state computation failed. Check the parameters and potential settings.') 
+            STOP
+        ELSE
+            DO j = 1, nv
+                dstate(j,:) = dstate_bound(:)
+            END DO
+            IF (ALLOCATED(dstate_bound)) DEALLOCATE(dstate_bound)
+            CALL CONSOLE('Initial discrete state created successfully.')
+        END IF
+    ELSE
+        DO j = 1, nv
+            V_A = V_params(j)
+            DO i = 1, SIZE(x)
+                dstate(j,i) = dstate_ptr(x(i))
+            END DO
+        norm = SUM( ABS(dstate(j,:))**2 ) * dx
+        dstate(j,:) = dstate(j,:) / SQRT(norm)
+        END DO
+        CALL CONSOLE('Initial discrete state created successfully.')
     END IF
     
     
@@ -125,19 +154,6 @@ PROGRAM MAIN
         CLOSE(iounit)
         CALL CONSOLE('Data successfully written to DATA/RydbergStates/V.txt')
 
-
-        ! Creating initial discrete state
-        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
-        ALLOCATE(dstate(nv,SIZE(x)))
-        DO j = 1, nv
-            V_A = V_params(j)
-            DO i = 1, SIZE(x)
-                dstate(j,i) = dstate_ptr(x(i))
-            END DO
-        norm = SUM( ABS(dstate(j,:))**2 ) * dx
-        dstate(j,:) = dstate(j,:) / SQRT(norm)
-        END DO
-        CALL CONSOLE('Initial discrete state created successfully.')
     
         OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/dstate.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
@@ -381,19 +397,6 @@ PROGRAM MAIN
         CALL CONSOLE('Data successfully written to DATA/DSState/V_SR.txt')
 
     
-        ! Creating initial discrete state
-        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
-        ALLOCATE(dstate(nv,SIZE(x)))
-        DO j = 1, nv
-            V_A = V_params(j)
-            DO i = 1, SIZE(x)
-                dstate(j,i) = dstate_ptr(x(i))
-            END DO
-        norm = SUM( ABS(dstate(j,:))**2 ) * dx
-        dstate(j,:) = dstate(j,:) / SQRT(norm)
-        END DO
-        CALL CONSOLE('Initial discrete state created successfully.')
-    
         OPEN(NEWUNIT=iounit, FILE='DATA/DSState/dstate.txt', STATUS='replace', ACTION='write')
         WRITE(iounit, '(A3, A17, A21)', advance='no') '#', 'R [au]','dstate [a.u.]'
         WRITE(iounit,*)
@@ -609,7 +612,6 @@ PROGRAM MAIN
         IF (ALLOCATED(PhaseshiftFull)) DEALLOCATE(PhaseshiftFull)
         IF (ALLOCATED(DS_PhaseshiftFull)) DEALLOCATE(DS_PhaseshiftFull)
         IF (ALLOCATED(VdeFull)) DEALLOCATE(VdeFull)
-        IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
     
     END IF
     
@@ -825,6 +827,7 @@ PROGRAM MAIN
     IF (ALLOCATED(x)) DEALLOCATE(x)
     IF (ALLOCATED(e)) DEALLOCATE(e)
     IF (ALLOCATED(V_params)) DEALLOCATE(V_params)
+    IF (ALLOCATED(dstate)) DEALLOCATE(dstate)
     
     CONTAINS
     
@@ -869,6 +872,18 @@ PROGRAM MAIN
         REAL(KIND = idk), PARAMETER :: rrc = 1.5d0
         V_2D = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
     END FUNCTION V_2D
+
+    ! Potential V_2D(R)
+    REAL(KIND = idk) FUNCTION V_2D_asymptotic(R)
+        IMPLICIT NONE
+        REAL(KIND = idk), INTENT(IN) :: R
+        REAL(KIND = idk), PARAMETER :: a = 0.4d0
+        REAL(KIND = idk), PARAMETER :: b = 2.0d0
+        REAL(KIND = idk), PARAMETER :: c = 1.5d0
+        REAL(KIND = idk), PARAMETER :: d = 0.72d0
+        REAL(KIND = idk), PARAMETER :: rc = 5.0d0
+        V_2D_asymptotic = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0)
+    END FUNCTION V_2D_asymptotic
     
     
     ! Pure Coulombic potential for testing 

@@ -3,6 +3,7 @@
 *.mod
 *.a
 *.so
+*.pyc
 
 # Compiled objects forlder
 built/

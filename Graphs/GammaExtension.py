@@ -8,15 +8,31 @@ from matplotlib.ticker import AutoMinorLocator
 import gc
 import os
 
+import sys
+import argparse
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+import settings
+parser = argparse.ArgumentParser(description="Script for generating plots.")
+parser.add_argument('--model', type=str, default='2DModel', help='Select the calculation mode defined in settings.py')
+args = parser.parse_args()
+if args.model not in settings.MODELS:
+    print(f"\n[ERROR] Mode '{args.model}' is not defined in settings.py!")
+    print(f"Available modes: {list(settings.MODELS.keys())}\n")
+    sys.exit(1)
+cfg = settings.MODELS[args.model]
+print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
+VA_name = cfg.get('legend_variable_name', 'R')
+
 base_path = r"./DATAcut"
 output_path = r"./Graphs/GammaExtension"
 os.makedirs(output_path, exist_ok=True)
 
-potentials = np.linspace(-0.15, 0.3, 10)
-max_points_to_plot = 40
+potentials = cfg['potentials']
+max_points_to_plot = 35
 
 aspect_ratio = 'square'
-specific_value = None 
 
 # Definice parametrů legendy
 legend_params = {
@@ -71,14 +87,11 @@ xlog = False
 
 limit_x = True 
 limit_y = True 
-x_range = [-5, 2.5]   
-y_range = [-0.2, 4.5]     
+x_range = cfg['GammaExtension_x_range']
+y_range = cfg['GammaExtension_y_range']     
 x_rangeAll = x_range
-y_rangeAll = [-0.2, 5.5]  
-minstep_x = False 
-minstep_y = False 
-step_x = 2 
-step_y = 0.1 
+y_rangeAll = y_range
+
 
 RYDBERG_EV = 13.605693
 HARTREE_EV = 27.211386
@@ -113,12 +126,12 @@ else:
 
 for (potindx, VA) in enumerate(potentials):
 
-    name = rf'GammaExtension_VA={VA:.2f}'
+    name = rf'GammaExtension_{VA_name}={VA:.2f}'
     x_column = 0 
     col_idx = potindx + 1 
     
     show_legend = True 
-    legend_title = f"$V_A = {VA:.2f}$" 
+    legend_title = f"${VA_name} = {VA:.2f}$" 
     
     if aspect_ratio == 'golden_ratio':
         golden_ratio = (1 + 5 ** 0.5) / 2
@@ -225,8 +238,10 @@ for (potindx, VA) in enumerate(potentials):
         else:
             ax.legend(**legend_params)
             
-    ax.tick_params(axis='x', direction='in', which='both', top=True, bottom=True, labelbottom=True, length = 6)
-    ax.tick_params(axis='y', direction='in', which='both', left=True, right=True, labelleft=True, length = 6)
+    ax.xaxis.set_minor_locator(AutoMinorLocator())
+    ax.yaxis.set_minor_locator(AutoMinorLocator())
+    ax.tick_params(axis='both', direction='in', which='major', top=True, right=True, length=6)
+    ax.tick_params(axis='both', direction='in', which='minor', top=True, right=True, length=3)
     ax.xaxis.set_minor_locator(AutoMinorLocator())
     ax.yaxis.set_minor_locator(AutoMinorLocator())
     
@@ -252,7 +267,10 @@ ax_all.axvline(0, color='gray', linestyle=':', linewidth=0.8)
 
 ax_all.legend(**legend_params)
 
-ax_all.tick_params(axis='both', direction='in', which='both', top=True, right=True, length=6)
+ax_all.xaxis.set_minor_locator(AutoMinorLocator())
+ax_all.yaxis.set_minor_locator(AutoMinorLocator())
+ax_all.tick_params(axis='both', direction='in', which='major', top=True, right=True, length=6)
+ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=True, length=3)
 ax_all.xaxis.set_minor_locator(AutoMinorLocator())
 ax_all.yaxis.set_minor_locator(AutoMinorLocator())
 ax_all.grid(False)
