@@ -220,7 +220,7 @@ MODULE DiscreteState
         REAL(KIND = idk), INTENT(OUT) :: defect_phase
         PROCEDURE(potential_interface), POINTER, INTENT(IN) :: potential
 
-        INTEGER :: N, i, i0, i1
+        INTEGER :: N, i, i0, i1, i_SR
         REAL(KIND = idk) :: dx, kappa, nu
         REAL(KIND = idk), ALLOCATABLE :: psi(:), k2(:)
         COMPLEX(KIND=idk) :: H_plus, H_minus
@@ -235,30 +235,31 @@ MODULE DiscreteState
 
         N = SIZE(x)
         dx = ABS(x(2) - x(1))
+        i_SR = NINT((xmax_SR-x(1))/dx) + 1 + xpick
+        i_SR = MIN(MAX(i_SR,1),N)
+        i0 = MAX(1, i_SR - xpick - xn)
+        i1 = MIN(N, i_SR - xpick + xn)
         
-        ALLOCATE(psi(N))
-        ALLOCATE(k2(N))
-        DO i = 1, N
+        ALLOCATE(psi(i1))
+        ALLOCATE(k2(i1))
+        DO i = 1, i1
             k2(i) = 2.0d0 * m / (hbar**2) * (e - potential(x(i)))
         END DO
         
         psi(1) = 0.0d0
         psi(2) = dx**(l+1) 
-        DO i = 2, n-1
+        DO i = 2, i1-1
             psi(i+1) = (2.0d0*(1.0d0-5.0d0*dx**2*k2(i)/12.0d0)*psi(i) - (1.0d0+dx**2*k2(i-1)/12.0d0)*psi(i-1)) / (1.0d0+dx**2*k2(i+1)/12.0d0)
         END DO
         DEALLOCATE(k2)
-        
-        i0 = MAX(1, N - xpick - xn)
-        i1 = MIN(N, N - xpick + xn)
         
         M11 = (0.0d0, 0.0d0); M12 = (0.0d0, 0.0d0)
         M21 = (0.0d0, 0.0d0); M22 = (0.0d0, 0.0d0)
         R1  = (0.0d0, 0.0d0); R2  = (0.0d0, 0.0d0)
         
         DO i = i0, i1
-            H_plus  = analytic_asymptotic(x(i), e, m, Z, l, 1)
-            H_minus = analytic_asymptotic(x(i), e, m, Z, l, -1)
+            H_plus  = analytic_asymptotic(x(i), e, m, Z, l, 1, .FALSE.)
+            H_minus = analytic_asymptotic(x(i), e, m, Z, l, -1, .FALSE.)
             
             M11 = M11 + CONJG(H_plus)  * H_plus
             M12 = M12 + CONJG(H_plus)  * H_minus
@@ -324,21 +325,32 @@ MODULE DiscreteState
         
         
         INTEGER :: i, N
+        REAL(KIND = idk) :: prefactor
         REAL(KIND = idk), ALLOCATABLE :: ham_dstate(:), dx
         
         N = SIZE(x)
         dx = ABS(x(2) - x(1))
+        prefactor = - (hbar**2 / (2.0d0 * mass)) / (12.0d0 * dx**2)
         
         ALLOCATE(ham_dstate(N))
-        ham_dstate = 0.0d0
-        ham_dstate(1) = - (hbar**2 / (2.0d0 * mass)) * (dstate(2) - 2.0d0*dstate(1)) / (dx**2) + potential(x(1)) * dstate(1)
+
+        ham_dstate(1) = prefactor * (35.0d0*dstate(1) - 104.0d0*dstate(2) + 114.0d0*dstate(3) - 56.0d0*dstate(4) + 11.0d0*dstate(5)) + potential(x(1)) * dstate(1)
         ham_dstate(1) = ham_dstate(1) * dstate(1)
-        ham_dstate(N) = - (hbar**2 / (2.0d0 * mass)) * (dstate(N) - 2.0d0*dstate(N) + dstate(N-1)) / (dx**2) + potential(x(N)) * dstate(N)
-        ham_dstate(N) = ham_dstate(N) * dstate(N)
-        DO i = 2, N-1
-            ham_dstate(i) = - (hbar**2 / (2.0d0 * mass)) * (dstate(i+1) - 2.0d0*dstate(i) + dstate(i-1)) / (dx**2) + potential(x(i)) * dstate(i)
+
+        ham_dstate(2) = prefactor * (11.0d0*dstate(1) - 20.0d0*dstate(2) + 6.0d0*dstate(3) + 4.0d0*dstate(4) - dstate(5)) + potential(x(2)) * dstate(2)
+        ham_dstate(2) = ham_dstate(2) * dstate(2)
+
+        DO i = 3, N-2
+            ham_dstate(i) = prefactor * (-dstate(i+2) + 16.0d0*dstate(i+1) - 30.0d0*dstate(i) + 16.0d0*dstate(i-1) - dstate(i-2)) + potential(x(i)) * dstate(i)
             ham_dstate(i) = ham_dstate(i) * dstate(i)
         END DO
+
+        ham_dstate(N-1) = prefactor * (11.0d0*dstate(N) - 20.0d0*dstate(N-1) + 6.0d0*dstate(N-2) + 4.0d0*dstate(N-3) - dstate(N-4)) + potential(x(N-1)) * dstate(N-1)
+        ham_dstate(N-1) = ham_dstate(N-1) * dstate(N-1)
+
+        ham_dstate(N) = prefactor * (35.0d0*dstate(N) - 104.0d0*dstate(N-1) + 114.0d0*dstate(N-2) - 56.0d0*dstate(N-3) + 11.0d0*dstate(N-4)) + potential(x(N)) * dstate(N)
+        ham_dstate(N) = ham_dstate(N) * dstate(N)
+        
         CALL definite_integral(ham_dstate, dx, DSenergy)
         DEALLOCATE(ham_dstate)  
     

@@ -7,12 +7,12 @@
 
 # --- SBATCH Partition Settings ---
 #SBATCH --partition=ffa
-#SBATCH --time=03:59:00
+#SBATCH --time=11:59:00
 
 # --- SBATCH Computation settings Settings ---
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
+#SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=256M
 
 

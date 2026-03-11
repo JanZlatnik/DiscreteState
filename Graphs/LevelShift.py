@@ -24,6 +24,7 @@ if args.model not in settings.MODELS:
 cfg = settings.MODELS[args.model]
 print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
 VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/LevelShift"
@@ -80,8 +81,8 @@ files_eig = [
 ds_energies_data = np.loadtxt(f"{base_path}/DSState/DSenergies.txt", usecols=(1,))
 
 # Popisky os
-X_axis = r'Energy$\,(\mathrm{eV})$'
-Y_axis = r'Level Shift Operator$\,(\mathrm{eV})$' 
+X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
+Y_axis = r'Level shift $F(\epsilon)\,(\mathrm{eV})$' 
 
 # Nastavení LaTeX
 plt.rcParams['font.family'] = 'serif'
@@ -121,7 +122,7 @@ y_range = cfg['LevelShift_y_range']
 # Barvy pro křivky
 colors_curves = ['blue', 'red', 'teal', 'orange', 'green']
 styles_curves = ['-', '-', '-.', '-.', '--'] 
-labels_curves = [r'$\Delta(E)$', r'$\Gamma(E)$', r'$\Delta_\mathrm{anc}(E)$', r'$\Gamma_\mathrm{anc}(E)$', r'$2\pi|V_{d\epsilon}|^2$']
+labels_curves = [r'$\Delta(\epsilon)$', r'$\Gamma(\epsilon)$', r'$\Delta_\mathrm{anc}(\epsilon)$', r'$\Gamma_\mathrm{anc}(\epsilon)$', r'$2\pi|V_{d\epsilon}|^2$']
 widths_curves = [1.5, 1.5, 1.2, 1.2, 1.2]
 
 for (potindx, VA) in enumerate(potentials):
@@ -167,7 +168,7 @@ for (potindx, VA) in enumerate(potentials):
         eig_vals = eig_vals[(eig_vals >= x_range[0]) & (eig_vals <= x_range[1])]
         
         ax.vlines(eig_vals, ymin=y_range[0], ymax=y_range[1], colors='gray', linestyles='solid', linewidth=0.75, alpha=0.6)
-        ax.plot([], [], color='gray', linestyle='solid', linewidth=1.0, label=r'$E_n^{PHP}$')
+        ax.plot([], [], color='gray', linestyle='solid', linewidth=1.0, label=r'$\epsilon_n^{PHP}$')
     except: pass
 
     try:
@@ -176,7 +177,7 @@ for (potindx, VA) in enumerate(potentials):
         eig_vals = eig_vals[(eig_vals >= x_range[0]) & (eig_vals <= x_range[1])]
         
         ax.vlines(eig_vals, ymin=y_range[0], ymax=y_range[1], colors='black', linestyles='dotted', linewidth=0.75, alpha=0.6)
-        ax.plot([], [], color='black', linestyle='dotted', linewidth=1.0, label=r'$E_n^{H}$')
+        ax.plot([], [], color='black', linestyle='dotted', linewidth=1.0, label=r'$\epsilon_n^{H}$')
     except: pass
 
     try:
@@ -185,7 +186,7 @@ for (potindx, VA) in enumerate(potentials):
         x_line = np.linspace(x_range[0], x_range[1], 100)
         y_line = x_line - E_DS
         
-        ax.plot(x_line, y_line, color='purple', linestyle='--', linewidth=1.0, label=r'$E + E_{d}$')
+        ax.plot(x_line, y_line, color='purple', linestyle='--', linewidth=1.0, label=r'$\epsilon + \epsilon_{d}$')
     except IndexError: pass
 
 
@@ -195,7 +196,7 @@ for (potindx, VA) in enumerate(potentials):
     if limit_x: ax.set_xlim(x_range)
     if limit_y: ax.set_ylim(y_range)
     
-    legend_title = f"${VA_name} = {VA:.2f}$"
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
     ax.legend(title=legend_title, **legend_params)
     
     ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -205,6 +206,7 @@ for (potindx, VA) in enumerate(potentials):
     ax.grid(False)
 
     fig.savefig(f'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(f'{output_path}/{name}.pgf', format='pgf')
     plt.close(fig)
     gc.collect()
 
@@ -223,5 +225,6 @@ ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=T
 ax_all.grid(False)
 
 fig_all.savefig(f'{output_path}/LevelShift_All.pdf', format='pdf')
+fig_all.savefig(f'{output_path}/LevelShift_All.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

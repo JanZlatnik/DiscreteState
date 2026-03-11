@@ -18,13 +18,11 @@ parser = argparse.ArgumentParser(description="Script for generating plots.")
 parser.add_argument('--model', type=str, default='2DModel', help='Select the calculation mode defined in settings.py')
 args = parser.parse_args()
 if args.model not in settings.MODELS:
-    print(f"\n[ERROR] Mode '{args.model}' is not defined in settings.py!")
-    print(f"Available modes: {list(settings.MODELS.keys())}\n")
     sys.exit(1)
 cfg = settings.MODELS[args.model]
-print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
-VA_name = cfg.get('legend_variable_name', 'R')
 
+VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/Potentials"
@@ -55,9 +53,9 @@ BIGGER_SIZE = 24
 LEGEND_SIZE = 12
 SIZE = 6
 
-X_axis = r'Radial Coordinate$\,(a_0)$'
+X_axis = r'Radial coordinate $r\,(a_0)$'
 Y_axis_V = r'Potential$\,(\mathrm{eV})$'
-Y_axis_Psi = r'Discrete State Wavefunction$\,(\mathrm{u.a.})$'
+Y_axis_Psi = r'Discrete state wavefunction $\phi_d(r)\,(\mathrm{a.u.})$'
 
 limit_x = True 
 limit_y_V = True 
@@ -89,7 +87,6 @@ plt.rc('ytick', labelsize=SMALL_SIZE)
 plt.rc('legend', fontsize=LEGEND_SIZE) 
 plt.rc('figure', titlesize=BIGGER_SIZE) 
 
-
 if aspect_ratio == 'golden_ratio':
     golden_ratio = (1 + 5 ** 0.5) / 2
     fig_all, ax_all = plt.subplots(figsize=(SIZE*golden_ratio, SIZE))
@@ -98,12 +95,11 @@ else:
 
 ds_energies = np.loadtxt(f"{base_path}/DSState/DSenergies.txt", usecols=(1,))
 
-
 for (potindx, VA) in enumerate(potentials):
 
     name = rf'Potential_{VA_name}={VA:.2f}'
     col_idx = potindx + 1 
-    legend_title = f"${VA_name} = {VA:.2f}$"
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
 
     e_ds = ds_energies[potindx]
 
@@ -115,7 +111,6 @@ for (potindx, VA) in enumerate(potentials):
         r_plot = r_V[mask_start:]
         V_plot = V_vals[mask_start:]
     except OSError:
-        print(f"Skipping V.txt for {VA_name}={VA}")
         continue
 
     try:
@@ -130,7 +125,6 @@ for (potindx, VA) in enumerate(potentials):
     r0, Omega, V0 = cfg['Potentials_harmonic_params'](VA)
     V_harm_au = V0 + 0.5 * (Omega**2) * ((r_plot - r0)**2)
     V_harm = V_harm_au * HARTREE_EV
-
 
     if aspect_ratio == 'golden_ratio':
         fig, ax1 = plt.subplots(figsize=(SIZE*golden_ratio + 1.0, SIZE))
@@ -157,13 +151,14 @@ for (potindx, VA) in enumerate(potentials):
         frac = (e_ds - V_min) / (V_max - V_min)
         ax2.set_ylim([-frac * y_range_scale, (1-frac) * y_range_scale]) 
 
-    # Sjednocená legenda pomocí dummy lines na ax1
     lines = []
     labels = []
     
     lines.append(plt.Line2D([], [], color=color_V, linestyle='-', linewidth=2))
     labels.append(r'$V(r)$')
 
+    lines.append(plt.Line2D([], [], color=color_Asy, linestyle='--', linewidth=1.2))
+    labels.append(r'$V_\mathrm{asymp}(r)$')
     
     if psi_vals is not None:
         lines.append(plt.Line2D([], [], color=color_Psi, linestyle='-.', linewidth=1.5))
@@ -183,12 +178,11 @@ for (potindx, VA) in enumerate(potentials):
     ax2.yaxis.set_minor_locator(AutoMinorLocator())
 
     fig.savefig(f'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(f'{output_path}/{name}.pgf', format='pgf')
     plt.close(fig)
     gc.collect()
 
-    
     ax_all.plot(r_plot, V_plot, color=color_V, linewidth=1.2, alpha=1.0)
-
 
 if 'r_plot' in locals():
     V_asy_all = (-Z/r_plot + (l*(l+1))/(2 * r_plot**2)) * HARTREE_EV
@@ -201,8 +195,9 @@ if limit_y_V: ax_all.set_ylim(y_range_V)
 
 lines_all = [
     plt.Line2D([], [], color=color_V, linestyle='-', linewidth=1.2),
+    plt.Line2D([], [], color=color_Asy, linestyle='--', linewidth=1.0)
 ]
-labels_all = [r'$V(r)$']
+labels_all = [r'$V(r)$', r'$V_\mathrm{asymp}(r)$']
 ax_all.legend(lines_all, labels_all, **legend_params)
 
 ax_all.xaxis.set_minor_locator(AutoMinorLocator())
@@ -213,5 +208,6 @@ ax_all.xaxis.set_minor_locator(AutoMinorLocator())
 ax_all.yaxis.set_minor_locator(AutoMinorLocator())
 
 fig_all.savefig(rf'{output_path}/PotentialsAll.pdf', format='pdf')
+fig_all.savefig(rf'{output_path}/PotentialsAll.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

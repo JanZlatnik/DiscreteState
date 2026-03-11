@@ -24,6 +24,7 @@ if args.model not in settings.MODELS:
 cfg = settings.MODELS[args.model]
 print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
 VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/PhaseshiftsDefects"
@@ -70,12 +71,12 @@ BIGGER_SIZE = 24
 LEGEND_SIZE = 12
 SIZE = 6
 
-X_axis = r'Energy$\,(\mathrm{eV})$'
-Y_axis = r'Phaseshift'
+X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
+Y_axis = r'Phase shift $\delta(\epsilon)$'
 
 legends = [
-    r'$\delta(E)$', r'$\delta_\mathrm{res}(E)$', r'$\delta_\mathrm{bg}(E)$', 
-    r'$\pi\mu(E)$', r'$\pi\mu_\mathrm{res}(E)$', r'$\pi\mu_\mathrm{bg}(E)$',
+    r'$\delta(\epsilon)$', r'$\delta_\mathrm{res}(\epsilon)$', r'$\delta_\mathrm{bg}(\epsilon)$', 
+    r'$\pi\mu(\epsilon)$', r'$\pi\mu_\mathrm{res}(\epsilon)$', r'$\pi\mu_\mathrm{bg}(\epsilon)$',
     r'$\pi\mu^H_n$', r'$\pi\mu^{PHP}_n$'
 ]
 labels = [0] * 8 
@@ -140,7 +141,7 @@ for (potindx, VA) in enumerate(potentials):
     col_idx = potindx + 1 
     
     show_legend = True 
-    legend_title = f"${VA_name} = {VA:.2f}$" 
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
     legend_frame = False 
 
     if aspect_ratio == 'golden_ratio':
@@ -285,6 +286,7 @@ for (potindx, VA) in enumerate(potentials):
         ax.set_ylim(y_range)
 
     fig.savefig(rf'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(rf'{output_path}/{name}.pgf', format='pgf')
     
     plt.close(fig)
     gc.collect()
@@ -306,5 +308,6 @@ ax_all.yaxis.set_minor_locator(AutoMinorLocator())
 ax_all.grid(False)
 
 fig_all.savefig(rf'{output_path}/PhaseshiftDefectsAll.pdf', format='pdf')
+fig_all.savefig(rf'{output_path}/PhaseshiftDefectsAll.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

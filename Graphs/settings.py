@@ -21,45 +21,49 @@ def harmonic_params_simple(VA):
     V0 = -1.5 + VA
     return r0, Omega, V0
 
+def harmonic_turn_off(VA):
+    return np.nan, np.nan, np.nan
+
 
 MODELS = {
     # -------------------------------------------------------------------------------
-    '2DModel' : {
+    '2DModel1' : {
         'potentials': np.linspace(0.7, 10.0, 10),
         'legend_variable_name': 'R',
+        'legend_unit': r'\,a_0',
         
         # Potentials
         'Potentials_x_range': [0, 15],
         'Potentials_y_range_V': [-21, 21],
         'Potentials_y_range_scale': 4,
-        'Potentials_harmonic_params': harmonic_params_2D,
+        'Potentials_harmonic_params': harmonic_turn_off,
         'Potentials_Z': 1.0,
         'Potentials_l': 1,
 
         # PhaseShiftsDefects
-        'PhaseShiftsDefects_shifts': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_DS_shifts': [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-        'PhaseShiftsDefects_shifts_H': [2,2,2,2,2,2,2,2,2,2,2],
-        'PhaseShiftsDefects_shifts_PHP': [2,2,2,2,2,2,2,2,2,2,2],
-        'PhaseShiftsDefects_x_range': [-10, 10],
-        'PhaseShiftsDefects_y_range': [-2.5, 4],
-        'PhaseShiftsDefects_x_rangeAll': [-10,10],
-        'PhaseShiftsDefects_y_rangeAll': [-2.5, 4],
+        'PhaseShiftsDefects_shifts': [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2],
+        'PhaseShiftsDefects_DS_shifts': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_shifts_H': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_shifts_PHP': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_x_range': [-7.5, 7.5],
+        'PhaseShiftsDefects_y_range': [-9, 4],
+        'PhaseShiftsDefects_x_rangeAll': [-7.5, 7.5],
+        'PhaseShiftsDefects_y_rangeAll': [-9, 4],
         'PhaseShiftsDefects_font_size' : 10,
         'PhaseShiftsDefects_ncol' : 2,
 
         # LevelShift
-        'LevelShiftFar_base_path': r"./DATAsparse",
         'LevelShift_x_range': [-5, 5],
-        'LevelShift_y_range': [-4, 4],
+        'LevelShift_y_range': [-5, 5],
 
         # LevelShiftsFar
-        'LevelShiftFar_x_range': [-32000, 32000],
+        'LevelShiftFar_base_path': r"./DATA",
+        'LevelShiftFar_x_range': [-300, 300],
         'LevelShiftFar_y_range': [-5, 5],
 
         # GammaExtension
         'GammaExtension_x_range': [-5, 2.5],
-        'GammaExtension_y_range': [-0.05, 0.7],
+        'GammaExtension_y_range': [-0.1, 5.0],
 
         # Hilbert
         'Hilbert_plot_gamma': False,
@@ -72,39 +76,40 @@ MODELS = {
     '2DModel2' : {
         'potentials': np.linspace(0.7, 10.0, 10),
         'legend_variable_name': 'R',
+        'legend_unit': r'\,a_0',
         
         # Potentials
         'Potentials_x_range': [0, 15],
         'Potentials_y_range_V': [-21, 21],
         'Potentials_y_range_scale': 4,
-        'Potentials_harmonic_params': harmonic_params_2D,
+        'Potentials_harmonic_params': harmonic_turn_off,
         'Potentials_Z': 1.0,
         'Potentials_l': 1,
 
         # PhaseShiftsDefects
-        'PhaseShiftsDefects_shifts': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_DS_shifts': [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-        'PhaseShiftsDefects_shifts_H': [2,2,2,2,2,2,2,2,2,2,2],
-        'PhaseShiftsDefects_shifts_PHP': [2,2,2,2,2,2,2,2,2,2,2],
-        'PhaseShiftsDefects_x_range': [-10, 10],
-        'PhaseShiftsDefects_y_range': [-2.5, 4],
-        'PhaseShiftsDefects_x_rangeAll': [-10,10],
-        'PhaseShiftsDefects_y_rangeAll': [-2.5, 4],
+        'PhaseShiftsDefects_shifts': [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2],
+        'PhaseShiftsDefects_DS_shifts': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_shifts_H': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_shifts_PHP': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_x_range': [-7.5, 7.5],
+        'PhaseShiftsDefects_y_range': [-9, 4],
+        'PhaseShiftsDefects_x_rangeAll': [-7.5, 7.5],
+        'PhaseShiftsDefects_y_rangeAll': [-9, 4],
         'PhaseShiftsDefects_font_size' : 10,
         'PhaseShiftsDefects_ncol' : 2,
 
         # LevelShift
-        'LevelShift_x_range': [-13, 13],
-        'LevelShift_y_range': [-3, 3],
+        'LevelShift_x_range': [-7.5, 7.5],
+        'LevelShift_y_range': [-3.5, 3.5],
 
         # LevelShiftsFar
         'LevelShiftFar_base_path': r"./DATA",
-        'LevelShiftFar_x_range': [-50, 50],
+        'LevelShiftFar_x_range': [-300, 300],
         'LevelShiftFar_y_range': [-5, 5],
 
         # GammaExtension
         'GammaExtension_x_range': [-5, 2.5],
-        'GammaExtension_y_range': [-0.05, 0.7],
+        'GammaExtension_y_range': [-0.05, 2.0],
 
         # Hilbert
         'Hilbert_plot_gamma': False,
@@ -128,13 +133,13 @@ MODELS = {
 
         # PhaseShiftsDefects
         'PhaseShiftsDefects_shifts': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_DS_shifts': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_DS_shifts': [1,1,1,1,1,1,1,1,1,1,1],
         'PhaseShiftsDefects_shifts_H': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_shifts_PHP': [1,1,1,1,1,1,1,1,1,1,1],
+        'PhaseShiftsDefects_shifts_PHP': [0,0,0,0,0,0,0,0,0,0,0],
         'PhaseShiftsDefects_x_range': [-12, 12],
-        'PhaseShiftsDefects_y_range': [-4.5, 1.0],
+        'PhaseShiftsDefects_y_range': [-4.5, 3.5],
         'PhaseShiftsDefects_x_rangeAll': [-12,12],
-        'PhaseShiftsDefects_y_rangeAll': [-5.5, 1.5],
+        'PhaseShiftsDefects_y_rangeAll': [-6.0, 3.5],
         'PhaseShiftsDefects_font_size' : 10,
         'PhaseShiftsDefects_ncol' : 2,
 

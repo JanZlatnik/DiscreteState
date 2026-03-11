@@ -1,5 +1,5 @@
 
-!------------------------< Parameters for Photodetachment >------------------------!
+!----------------------------< Parameters for DSState >----------------------------!
 !                                                                                  !    
 ! Contains: Basic mathematical and physical constants, parameters, mesh creation   !                                                                             
 !                                                                                  !
@@ -41,7 +41,7 @@ MODULE Parameters
     ! Potential settings
     REAL(KIND = idk), PARAMETER         :: Vmin = 0.7d0                 ! potential parameter V_A - minimum
     REAL(KIND = idk), PARAMETER         :: Vmax = 10.0d0                ! potential parameter V_A - maximum
-    INTEGER, PARAMETER                  :: nv = 10                      ! number of diferent potential parameters calculated
+    INTEGER, PARAMETER                  :: nv = 100                     ! number of diferent potential parameters calculated
     REAL(KIND = idk), PARAMETER         :: Z = 1.0d0                    ! strenght of Coulombic potential, i.e. Z/r
 
     ! Bound state parameters
@@ -53,22 +53,24 @@ MODULE Parameters
     REAL(KIND = idk), PARAMETER :: Ebound_min = -0.5d0                  ! minimum energy in test grid
     INTEGER, PARAMETER          :: Nbound = 200                         ! number of bound states explicitely calculated
     INTEGER, PARAMETER          :: Nstart = 50                          ! number of bound states computed on test grid
-    INTEGER, PARAMETER          :: Nprint = 50                          ! number of wavefucntions of bound states printed
+    INTEGER, PARAMETER          :: Nprint = 0                           ! number of wavefucntions of bound states printed
     
     ! Mesh settings
     REAL(KIND = idk), PARAMETER :: xmin = 1.0d-10         ! in [au]
-    REAL(KIND = idk), PARAMETER :: xmax = 12.0d0          ! in [au]
-    INTEGER, PARAMETER          :: mp = 4000
+    REAL(KIND = idk), PARAMETER :: xmax = 25.0d0          ! in [au]
+    REAL(KIND = idk), PARAMETER :: xmax_SR = 15.0d0       ! in [au]
+    INTEGER, PARAMETER          :: mp = 5000
     
     ! Energy mesh settings
-    REAL(KIND = idk), PARAMETER :: Emin = -13.0d0/phys_h0       ! [eV] to [au]
-    REAL(KIND = idk), PARAMETER :: Emax = 0.0d0/phys_h0        ! [eV] to [au]
-    INTEGER, PARAMETER          :: ep = 500000
+    REAL(KIND = idk), PARAMETER :: Emin = -20.0d0/phys_h0       ! [eV] to [au]
+    REAL(KIND = idk), PARAMETER :: Emax = 20.0d0/phys_h0        ! [eV] to [au]
+    INTEGER, PARAMETER          :: ep = 200
 
     ! Other parameters
     REAL(KIND = idk), PARAMETER :: m = 1.0d0        ! mass in [au]
     INTEGER, PARAMETER          :: l_ang = 1        ! angular momentum quantum number of the detached electron (l=0 for s-wave detachment, l=1 for p-wave detachment, etc.)
-    REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]
+    REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]¨
+    REAL(KIND = idk), PARAMETER :: nu_tol = 1.0d-3  ! COULCC analytic pole tolerance
     
     CONTAINS
     
@@ -88,6 +90,44 @@ MODULE Parameters
         END DO
         
     END SUBROUTINE
+
+
+    SUBROUTINE make_mesh_ndyn(xmin, xmax, xcore1, xcore2, mp, x)
+        IMPLICIT NONE
+        REAL(KIND = idk), INTENT(IN) :: xmin, xmax, xcore1, xcore2
+        INTEGER, INTENT(IN) :: mp
+        REAL(KIND = idk), ALLOCATABLE, INTENT(OUT) :: x(:)
+        
+        INTEGER :: mp1, mp2, mp3, i, steps2
+        REAL(KIND = idk) :: dx1, dx2, dx3
+        
+        steps2 = MAX(5, NINT((0.60d0 * REAL(mp, idk)) / 5.0d0) * 5)
+        mp2 = steps2 + 1
+        
+        mp1 = MAX(2, NINT(0.15d0 * REAL(mp, idk)))
+        
+        mp3 = mp - mp1 - mp2 + 2
+        
+        IF (ALLOCATED(x)) DEALLOCATE(x)
+        ALLOCATE(x(mp))
+        
+        dx1 = (xcore1 - xmin) / REAL(mp1 - 1, idk)
+        dx2 = (xcore2 - xcore1) / REAL(mp2 - 1, idk)
+        dx3 = (xmax - xcore2) / REAL(mp3 - 1, idk)
+        
+        DO i = 1, mp1
+            x(i) = xmin + REAL(i - 1, idk) * dx1
+        END DO
+        
+        DO i = 2, mp2
+            x(mp1 + i - 1) = xcore1 + REAL(i - 1, idk) * dx2
+        END DO
+
+        DO i = 2, mp3
+            x(mp1 + mp2 - 2 + i) = xcore2 + REAL(i - 1, idk) * dx3
+        END DO
+        
+    END SUBROUTINE make_mesh_ndyn
     
     
     SUBROUTINE CONSOLE(message)
@@ -115,15 +155,12 @@ MODULE Parameters
 
     FUNCTION cutoff_energy(l) RESULT(Ecut)
         INTEGER, INTENT(IN) :: l
-        REAL(KIND = idk) :: Ecut, C_limit
-        REAL(KIND = idk), PARAMETER :: max_exp = 14.0d0 * LOG(10.0d0)
+        REAL(KIND = idk) :: Ecut
         IF (l == 0) THEN
             Ecut = -1.0d0
         ELSE
             Ecut = -1.0d0 / (2.0d0 * REAL(l, KIND=idk)**2)
         END IF
-        C_limit = (max_exp**2) / (8.0d0 * m)
-        !Ecut = MAX(Ecut, - C_limit / xmax**2 )
     END FUNCTION cutoff_energy
     
     
@@ -152,6 +189,7 @@ MODULE Parameters
         WRITE(unit,*) "[x-Grid]"
         WRITE(unit,'(A25,1X,E0.6)') "xmin:", xmin
         WRITE(unit,'(A25,1X,F0.6)') "xmax:", xmax
+        WRITE(unit,'(A25,1X,F0.6)') "xmax_SR:", xmax_SR
         WRITE(unit,'(A25,1X,I0)')   "mp:", mp 
         WRITE(unit,*) ""
         
@@ -188,6 +226,7 @@ MODULE Parameters
         WRITE(unit,'(A25,1X,F0.6)') "m:", m
         WRITE(unit,'(A25,1X,I0)')   "l:", l_ang
         WRITE(unit,'(A25,1X,F0.6)') "R0:", R0
+        WRITE(unit,'(A25,1X,G0.6)') "nu_tol:", nu_tol
         WRITE(unit,*) ""   
         
         

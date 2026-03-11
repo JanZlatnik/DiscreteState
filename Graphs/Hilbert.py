@@ -24,6 +24,7 @@ if args.model not in settings.MODELS:
 cfg = settings.MODELS[args.model]
 print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
 VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/HilbertTransform"
@@ -51,14 +52,14 @@ filenames = [f"{base_path}/Hilbert/DeltaRydberg.txt",
              f"{base_path}/Hilbert/DeltaFull.txt",
              f"{base_path}/Hilbert/DeltaContinuous.txt"]
 
-legends = [[r'$\Delta_n(E)$'],[r'$\Delta(E)$'],[r'$\Delta_\mathrm{trans}(E)$'],[r'$\Delta_\epsilon(E)$']]
+legends = [[r'$\Delta_n(\epsilon)$'],[r'$\Delta(\epsilon)$'],[r'$\Delta_\mathrm{trans.}(\epsilon)$'],[r'$\Delta_\mathrm{cont.}(E)$']]
 colors = [['orange'],['blue'],['red'],['green']]
 line_styles = [[':'],['-'],['--'],['-.']]
 line_widths = [[''],[''],[''],['']]
 
 if plot_gamma:
     filenames.extend([f"{base_path}/DSState/gamma.txt", f"{base_path}/DSState/Vde.txt"])
-    legends.extend([[r'$\Gamma(E)$'], [r'$2\pi|V_{d\epsilon}|^2$']])
+    legends.extend([[r'$\Gamma(\epsilon)$'], [r'$2\pi|V_{d\epsilon}|^2$']])
     colors.extend([['black'], ['gray']])
     line_styles.extend([['-'], ['--']])
     line_widths.extend([[''], ['']])
@@ -104,7 +105,7 @@ for (potindx, VA) in enumerate(potentials):
     x_column = 1
     y_columns = [potindx+2]
     show_legend = True 
-    legend_title = f"${VA_name} = {VA:.2f}$" 
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
     
     # Nastavení velikostí
     SMALL_SIZE = 14
@@ -114,8 +115,8 @@ for (potindx, VA) in enumerate(potentials):
     SIZE = 6
 
     # Legendy, popisky, barvy a styly čar
-    X_axis = r'Energy$\,(\mathrm{eV})$'
-    Y_axis = r'Level Shift$\,(\mathrm{eV})$'
+    X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
+    Y_axis = r'Level shift $\Delta(\epsilon)\,(\mathrm{eV})$'
     labels = [[0]] * len(filenames)
     labels_position = [[(0,0)]] * len(filenames)
     markers = [['o', '^']] * len(filenames) 
@@ -237,6 +238,7 @@ for (potindx, VA) in enumerate(potentials):
         ax.set_ylim(y_range)
 
     fig.savefig(f'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(f'{output_path}/{name}.pgf', format='pgf')
     plt.close(fig)
     gc.collect()
 
@@ -256,5 +258,6 @@ ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=T
 ax_all.grid(False)
 
 fig_all.savefig(f'{output_path}/HilbertAll.pdf', format='pdf')
+fig_all.savefig(f'{output_path}/HilbertAll.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

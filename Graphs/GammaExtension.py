@@ -24,6 +24,7 @@ if args.model not in settings.MODELS:
 cfg = settings.MODELS[args.model]
 print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
 VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
 output_path = r"./Graphs/GammaExtension"
@@ -64,13 +65,13 @@ BIGGER_SIZE = 24
 LEGEND_SIZE = 12
 SIZE = 6
 
-X_axis = r'Energy$\,(\mathrm{eV})$'
-Y_axis = r'Resonance Width$\,(\mathrm{eV})$' 
+X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
+Y_axis = r'Resonance width $\Gamma(\epsilon)\,(\mathrm{eV})$' 
 
 legends = [
-    r'$\Gamma(E)$',
-    r'$\Gamma_\mathrm{anc}(E)$',
-    r'$2\pi|V_{dn}|^2\rho(E)$'
+    r'$\Gamma(\epsilon)$',
+    r'$\Gamma_\mathrm{anc}(\epsilon)$',
+    r'$2\pi|V_{dn}|^2\rho(\epsilon)$'
 ]
 
 colors = ['blue', 'red', 'green'] 
@@ -131,7 +132,7 @@ for (potindx, VA) in enumerate(potentials):
     col_idx = potindx + 1 
     
     show_legend = True 
-    legend_title = f"${VA_name} = {VA:.2f}$" 
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
     
     if aspect_ratio == 'golden_ratio':
         golden_ratio = (1 + 5 ** 0.5) / 2
@@ -254,6 +255,7 @@ for (potindx, VA) in enumerate(potentials):
         ax.set_xscale('log')
         
     fig.savefig(rf'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(rf'{output_path}/{name}.pgf', format='pgf')
     
     plt.close(fig)
     gc.collect()
@@ -276,5 +278,6 @@ ax_all.yaxis.set_minor_locator(AutoMinorLocator())
 ax_all.grid(False)
 
 fig_all.savefig(rf'{output_path}/GammaExtensionAll.pdf', format='pdf')
+fig_all.savefig(rf'{output_path}/GammaExtensionAll.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

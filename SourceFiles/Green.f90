@@ -102,17 +102,22 @@ MODULE Green
     END FUNCTION general_asymptotic
 
 
-    FUNCTION analytic_asymptotic(x, E, m, Z, l, asymptotics) RESULT(val)
+    FUNCTION analytic_asymptotic(x, E, m, Z, l, asymptotics, smooth) RESULT(val)
         REAL(KIND=idk), INTENT(IN) :: x, E, m, Z
         INTEGER, INTENT(IN) :: l, asymptotics
+        LOGICAL, INTENT(IN) :: smooth
         COMPLEX(KIND=idk) :: val
-        
+
         REAL(KIND=idk) :: k, eta_real, kappa
         COMPLEX(KIND=idk) :: zrho, zeta, zl_min
         COMPLEX(KIND=idk) :: fc(1), gc(1), fcp(1), gcp(1), sig(1)
         INTEGER :: ifail
         INTEGER :: kfn, mode
         CHARACTER(LEN=256) :: msg
+
+        REAL(KIND=idk) :: nu, nu1, nu2, E1, E2, nu_int
+        REAL(KIND=idk) :: r1, r2, phi1, phi2, r, phi, t
+        COMPLEX(KIND=idk) :: val1, val2
         
         zl_min = CMPLX(l, 0.0d0, KIND=idk)
         
@@ -138,14 +143,69 @@ MODULE Green
                 val = 0.0d0
                 RETURN
             END IF
-            kappa = SQRT(2.0d0 * m * ABS(E)) / hbar    
-            eta_real = -Z * m / (hbar**2 * kappa) 
-            zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
-            zeta = CMPLX(0.0d0, -eta_real, KIND=idk)
-            kfn = 0
-            ifail = 0
-            CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
-            val = gc(1)           
+
+            IF (ABS(Z)>1.0d-10) THEN
+                nu = Z * m / (hbar * SQRT(2.0d0 * m * ABS(E)))
+                nu_int = REAL(NINT(nu), KIND=idk)
+
+                IF (ABS(nu - nu_int) < nu_tol .AND. nu_int >= 1.0d0 .AND. smooth) THEN
+
+                    nu1 = nu_int - nu_tol
+                    nu2 = nu_int + nu_tol
+                    t = (nu - nu1) / (nu2 - nu1)
+
+                    E1 = - (Z**2 * m) / (2.0d0 * hbar**2 * nu1**2)
+                    E2 = - (Z**2 * m) / (2.0d0 * hbar**2 * nu2**2)
+
+                    kfn = 0
+                    ifail = 0
+
+                    kappa = SQRT(2.0d0 * m * ABS(E1)) / hbar    
+                    eta_real = -Z * m / (hbar**2 * kappa) 
+                    zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
+                    zeta = CMPLX(0.0d0, -eta_real, KIND=idk)
+                    CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+                    val1 = gc(1)     
+
+                    kappa = SQRT(2.0d0 * m * ABS(E2)) / hbar    
+                    eta_real = -Z * m / (hbar**2 * kappa) 
+                    zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
+                    zeta = CMPLX(0.0d0, -eta_real, KIND=idk)
+                    CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+                    val2 = gc(1)  
+
+                    r1 = ABS(val1)
+                    r2 = ABS(val2)
+                    phi1 = ATAN2(AIMAG(val1), REAL(val1))
+                    phi2 = ATAN2(AIMAG(val2), REAL(val2))
+                    IF (phi2 - phi1 > pi)  phi2 = phi2 - 2.0d0 * pi
+                    IF (phi1 - phi2 > pi)  phi2 = phi2 + 2.0d0 * pi
+
+                    r = r1 + (r2 - r1) * t
+                    phi = phi1 + (phi2 - phi1) * t
+
+                    val = CMPLX(r * COS(phi), r * SIN(phi), KIND=idk)
+                
+                ELSE
+
+                    kappa = SQRT(2.0d0 * m * ABS(E)) / hbar    
+                    eta_real = -Z * m / (hbar**2 * kappa) 
+                    zrho = CMPLX(0.0d0, kappa * x, KIND=idk)
+                    zeta = CMPLX(0.0d0, -eta_real, KIND=idk)
+                    kfn = 0
+                    ifail = 0
+                    CALL COULCC(zrho, zeta, zl_min, 1, fc, gc, fcp, gcp, sig, mode, kfn, ifail)
+                    val = gc(1)          
+                    
+                END IF
+
+            ELSE
+                val = 0.0d0
+                WRITE(msg, '(A, G0.6, A, G0.6, A)') '[ERROR] analytic_asymptotic called for zero Z at x=', x, ' E=', E*phys_h0, ' eV'
+                CALL CONSOLE(msg)
+            
+            END IF
+
         END IF
 
         IF (.NOT. IEEE_IS_FINITE(ABS(val))) THEN
@@ -361,9 +421,9 @@ MODULE Green
         j = 0
         DO 
             IF (j>N-3) EXIT
-            psi_I(N-j) = CMPLX(analytic_asymptotic(x(N-j), E, m, Z, l, -1), KIND=qdk)
-            psi_I(N-j-1) = CMPLX(analytic_asymptotic(x(N-j-1), E, m, Z, l, -1), KIND=qdk)
-            IF (ABS(psi_I(N-j))>0.0_qdk) EXIT
+            psi_I(N-j) = CMPLX(analytic_asymptotic(x(N-j), E, m, Z, l, -1, .TRUE.), KIND=qdk)
+            psi_I(N-j-1) = CMPLX(analytic_asymptotic(x(N-j-1), E, m, Z, l, -1, .TRUE.), KIND=qdk)
+            IF (ABS(psi_I(N-j))>0.0_qdk .AND. x(N-j)<xmax_SR) EXIT
             j = j + 2
         END DO
 

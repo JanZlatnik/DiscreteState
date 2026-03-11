@@ -24,6 +24,7 @@ if args.model not in settings.MODELS:
 cfg = settings.MODELS[args.model]
 print(f"--> Running {os.path.basename(__file__)} in mode: {args.model}")
 VA_name = cfg.get('legend_variable_name', 'R')
+VA_unit = cfg.get('legend_unit', '')
 
 base_path = cfg['LevelShiftFar_base_path']
 output_path = r"./Graphs/LevelShiftFar"
@@ -68,8 +69,8 @@ files_curves = [
     f"{base_path}/DSState/Vde.txt"
 ]
 
-X_axis = r'Energy$\,(\mathrm{eV})$'
-Y_axis = r'Level Shift Operator$\,(\mathrm{eV})$' 
+X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
+Y_axis = r'Level shift $F(\epsilon)\,(\mathrm{eV})$' 
 
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams["font.serif"] = ["Latin Modern Roman"]
@@ -105,7 +106,7 @@ y_range = cfg['LevelShiftFar_y_range']
 
 colors_curves = ['blue', 'red', 'green']
 styles_curves = ['-', '-', '--'] 
-labels_curves = [r'$\Delta(E)$', r'$\Gamma(E)$', r'$2\pi|V_{d\epsilon}|^2$']
+labels_curves = [r'$\Delta(\epsilon)$', r'$\Gamma(\epsilon)$', r'$2\pi|V_{d\epsilon}|^2$']
 widths_curves = [1.5, 1.5, 1.2]
 
 for (potindx, VA) in enumerate(potentials):
@@ -151,7 +152,7 @@ for (potindx, VA) in enumerate(potentials):
     if limit_x: ax.set_xlim(x_range)
     if limit_y: ax.set_ylim(y_range)
     
-    legend_title = f"${VA_name} = {VA:.2f}$"
+    legend_title = f"${VA_name} = {VA:.2f}{VA_unit}$"
     ax.legend(title=legend_title, **legend_params)
     
     ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -161,6 +162,7 @@ for (potindx, VA) in enumerate(potentials):
     ax.grid(False)
 
     fig.savefig(f'{output_path}/{name}.pdf', format='pdf')
+    fig.savefig(f'{output_path}/{name}.pgf', format='pgf')
     plt.close(fig)
     gc.collect()
 
@@ -179,5 +181,6 @@ ax_all.tick_params(axis='both', direction='in', which='minor', top=True, right=T
 ax_all.grid(False)
 
 fig_all.savefig(f'{output_path}/LevelShiftFar_All.pdf', format='pdf')
+fig_all.savefig(f'{output_path}/LevelShiftFar_All.pgf', format='pgf')
 plt.close(fig_all)
 gc.collect()

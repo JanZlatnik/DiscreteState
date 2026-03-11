@@ -50,9 +50,9 @@ PROGRAM MAIN
 
 
 
-    V_ptr => V_2D
-    V_asymptotic_ptr => V_2D_asymptotic
-    dstate_ptr => dstate2D
+    V_ptr => V_2D_1
+    V_asymptotic_ptr => V_2D_1_asymptotic
+    dstate_ptr => dstate1
     
 
 
@@ -75,7 +75,8 @@ PROGRAM MAIN
     CALL CONSOLE('Energy computational grid created successfully.')
     
     ! Potential parameter grid
-    CALL make_mesh(Vmin, Vmax, nv, V_params, dV)
+    !CALL make_mesh(Vmin, Vmax, nv, V_params, dV)
+    CALL make_mesh_ndyn(Vmin, Vmax, 1.5d0, 4.0d0, nv, V_params)
     CALL CONSOLE('Potential parameters grid created successfully.')
     
     
@@ -153,6 +154,15 @@ PROGRAM MAIN
         END DO
         CLOSE(iounit)
         CALL CONSOLE('Data successfully written to DATA/RydbergStates/V.txt')
+
+        ! Printing V_A parameters to file
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/Rvalues.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A3, A17)') '#', 'V_A_params [au]'
+        DO j = 1, nv
+            WRITE(iounit, '(1E20.12)') V_params(j)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/RydbergStates/Rvalues.txt')
 
     
         OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/dstate.txt', STATUS='replace', ACTION='write')
@@ -380,6 +390,15 @@ PROGRAM MAIN
         END DO
         CLOSE(iounit)
         CALL CONSOLE('Data successfully written to DATA/DSState/V.txt')
+
+        ! Printing V_A parameters to file
+        OPEN(NEWUNIT=iounit, FILE='DATA/DSState/Rvalues.txt', STATUS='replace', ACTION='write')
+        WRITE(iounit, '(A3, A17)') '#', 'V_A_params [au]'
+        DO j = 1, nv
+            WRITE(iounit, '(1E20.12)') V_params(j)
+        END DO
+        CLOSE(iounit)
+        CALL CONSOLE('Data successfully written to DATA/DSState/Rvalues.txt')
         
         ! Printing V Short Range b to file
         OPEN(NEWUNIT=iounit, FILE='DATA/DSState/V_SR.txt', STATUS='replace', ACTION='write')
@@ -452,7 +471,7 @@ PROGRAM MAIN
         WRITE(iounit, '(A3, A3, A21)', advance='no') '#', 'V_A','E_DS [eV]'
         WRITE(iounit,*)
         DO j = 1, nv
-            WRITE(iounit, '(F5.3, 1E20.12)') V_params(j), DSenergies(j) * phys_h0
+            WRITE(iounit, '(F0.3, 1E20.12)') V_params(j), DSenergies(j) * phys_h0
         END DO
         CLOSE(iounit)
         CALL CONSOLE('Data successfully written to DATA/DSState/DSenergies.txt')
@@ -860,8 +879,12 @@ PROGRAM MAIN
     END FUNCTION V_coulomb2
 
 
+
+
+
+
     ! Potential V_2D(R)
-    REAL(KIND = idk) FUNCTION V_2D(R)
+    REAL(KIND = idk) FUNCTION V_2D_2(R)
         IMPLICIT NONE
         REAL(KIND = idk), INTENT(IN) :: R
         REAL(KIND = idk), PARAMETER :: a = 0.4d0
@@ -870,11 +893,11 @@ PROGRAM MAIN
         REAL(KIND = idk), PARAMETER :: d = 0.72d0
         REAL(KIND = idk), PARAMETER :: rc = 5.0d0
         REAL(KIND = idk), PARAMETER :: rrc = 1.5d0
-        V_2D = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
-    END FUNCTION V_2D
+        V_2D_2 = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
+    END FUNCTION V_2D_2
 
     ! Potential V_2D(R)
-    REAL(KIND = idk) FUNCTION V_2D_asymptotic(R)
+    REAL(KIND = idk) FUNCTION V_2D_2_asymptotic(R)
         IMPLICIT NONE
         REAL(KIND = idk), INTENT(IN) :: R
         REAL(KIND = idk), PARAMETER :: a = 0.4d0
@@ -882,9 +905,40 @@ PROGRAM MAIN
         REAL(KIND = idk), PARAMETER :: c = 1.5d0
         REAL(KIND = idk), PARAMETER :: d = 0.72d0
         REAL(KIND = idk), PARAMETER :: rc = 5.0d0
-        V_2D_asymptotic = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0)
-    END FUNCTION V_2D_asymptotic
+        V_2D_2_asymptotic = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0)
+    END FUNCTION V_2D_2_asymptotic
+
+
+
+
+    ! Potential V_2D(R)
+    REAL(KIND = idk) FUNCTION V_2D_1(R)
+        IMPLICIT NONE
+        REAL(KIND = idk), INTENT(IN) :: R
+        REAL(KIND = idk), PARAMETER :: a = 0.5d0
+        REAL(KIND = idk), PARAMETER :: b = 1.2d0
+        REAL(KIND = idk), PARAMETER :: c = 1.8d0
+        REAL(KIND = idk), PARAMETER :: d = 0.6519d0
+        REAL(KIND = idk), PARAMETER :: rc = 4.5d0
+        REAL(KIND = idk), PARAMETER :: rrc = 1.5d0
+        V_2D_1 = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0) * TANH( (V_A-rrc)/c )
+    END FUNCTION V_2D_1
+
+    ! Potential V_2D(R)
+    REAL(KIND = idk) FUNCTION V_2D_1_asymptotic(R)
+        IMPLICIT NONE
+        REAL(KIND = idk), INTENT(IN) :: R
+        REAL(KIND = idk), PARAMETER :: a = 0.5d0
+        REAL(KIND = idk), PARAMETER :: b = 1.2d0
+        REAL(KIND = idk), PARAMETER :: c = 1.8d0
+        REAL(KIND = idk), PARAMETER :: d = 0.6519d0
+        REAL(KIND = idk), PARAMETER :: rc = 4.5d0
+        V_2D_1_asymptotic = - 1.0d0 / R + 0.5d0 * REAL(l_ang*(l_ang+1),KIND=idk) / R**2 + a * EXP(-(R-rc)**2/b**2) - d * EXP(-R**2/4.0d0)
+    END FUNCTION V_2D_1_asymptotic
     
+
+
+
     
     ! Pure Coulombic potential for testing 
     REAL(KIND = idk) FUNCTION V_pure_coulomb(R)
@@ -902,17 +956,6 @@ PROGRAM MAIN
         dstate1 = R * EXP(-R**2 / 2.0d0)
     END FUNCTION dstate1
 
-
-    ! Dstate 2D model
-    REAL(KIND = idk) FUNCTION dstate2D(R)
-        IMPLICIT NONE
-        REAL(KIND = idk), INTENT(IN) :: R
-        REAL(KIND = idk) :: r0_val, vpp_val, alpha_val
-        r0_val = 2.0000399463254763 - 0.23313506121835248*TANH(1.6687920618773417*(-1.1726784346053065 + V_A)) - 0.47621440751149846*Tanh(0.699057007565932*(-1.0900928248785635 + V_A))
-        vpp_val = 0.4911722132480025 + 0.4788236657617127/EXP(0.5254434396192675*V_A**2) + 0.5824851552152334*TANH(0.6948355643578058*(-2.104488212788001 + V_A)) + 0.23611621449803974*Tanh(1.3301337541821736*(-1.7627644298851943 + V_A))
-        alpha_val = 2.0d0 / sqrt(vpp_val)
-        dstate2D = R * EXP(-(R-r0_val)**2 / alpha_val)
-    END FUNCTION dstate2D
     
 END PROGRAM MAIN
   
