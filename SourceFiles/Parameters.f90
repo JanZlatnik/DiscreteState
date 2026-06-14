@@ -28,8 +28,8 @@ MODULE Parameters
     
     
     ! Computational settings
-    LOGICAL, PARAMETER                  :: RydbergStates = .FALSE.
-    LOGICAL, PARAMETER                  :: dstate_computation = .TRUE.
+    LOGICAL, PARAMETER                  :: RydbergStates = .TRUE.
+    LOGICAL, PARAMETER                  :: dstate_computation = .FALSE.
     LOGICAL, PARAMETER                  :: hilbert_computation = .FALSE.
     
         

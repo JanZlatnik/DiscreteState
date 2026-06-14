@@ -87,14 +87,14 @@ MODELS = {
         'Potentials_l': 1,
 
         # PhaseShiftsDefects
-        'PhaseShiftsDefects_shifts': [-2,-2,-2,-2,-2,-2,-2,-2,-2,-2,-2],
+        'PhaseShiftsDefects_shifts': [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
         'PhaseShiftsDefects_DS_shifts': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_shifts_H': [0,0,0,0,0,0,0,0,0,0,0],
-        'PhaseShiftsDefects_shifts_PHP': [0,0,0,0,0,0,0,0,0,0,0],
+        'PhaseShiftsDefects_shifts_H': [1,1,1,1,1,1,1,1,1,1,1],
+        'PhaseShiftsDefects_shifts_PHP': [1,1,1,1,1,1,1,1,1,1,1],
         'PhaseShiftsDefects_x_range': [-7.5, 7.5],
-        'PhaseShiftsDefects_y_range': [-9, 4],
+        'PhaseShiftsDefects_y_range': [-6, 4],
         'PhaseShiftsDefects_x_rangeAll': [-7.5, 7.5],
-        'PhaseShiftsDefects_y_rangeAll': [-9, 4],
+        'PhaseShiftsDefects_y_rangeAll': [-6, 4],
         'PhaseShiftsDefects_font_size' : 10,
         'PhaseShiftsDefects_ncol' : 2,
 
@@ -124,7 +124,7 @@ MODELS = {
         'legend_variable_name': 'V_A',
         
         # Potentials
-        'Potentials_x_range': [0, 10],
+        'Potentials_x_range': [0, 7],
         'Potentials_y_range_V': [-50, 50],
         'Potentials_y_range_scale': 4,
         'Potentials_harmonic_params': harmonic_params_simple,
@@ -169,7 +169,7 @@ MODELS = {
         'legend_variable_name': 'V_A',
         
         # Potentials
-        'Potentials_x_range': [0, 10],
+        'Potentials_x_range': [0, 7],
         'Potentials_y_range_V': [-50, 50],
         'Potentials_y_range_scale': 4,
         'Potentials_harmonic_params': harmonic_params_simple,

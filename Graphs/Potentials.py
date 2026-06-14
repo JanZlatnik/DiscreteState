@@ -54,7 +54,7 @@ LEGEND_SIZE = 12
 SIZE = 6
 
 X_axis = r'Radial coordinate $r\,(a_0)$'
-Y_axis_V = r'Potential$\,(\mathrm{eV})$'
+Y_axis_V = r'Potential energy$\,(\mathrm{eV})$'
 Y_axis_Psi = r'Discrete state wavefunction $\phi_d(r)\,(\mathrm{a.u.})$'
 
 limit_x = True 
@@ -158,7 +158,7 @@ for (potindx, VA) in enumerate(potentials):
     labels.append(r'$V(r)$')
 
     lines.append(plt.Line2D([], [], color=color_Asy, linestyle='--', linewidth=1.2))
-    labels.append(r'$V_\mathrm{asymp}(r)$')
+    labels.append(r'$V_\mathrm{LR}(r)$')
     
     if psi_vals is not None:
         lines.append(plt.Line2D([], [], color=color_Psi, linestyle='-.', linewidth=1.5))
@@ -197,7 +197,7 @@ lines_all = [
     plt.Line2D([], [], color=color_V, linestyle='-', linewidth=1.2),
     plt.Line2D([], [], color=color_Asy, linestyle='--', linewidth=1.0)
 ]
-labels_all = [r'$V(r)$', r'$V_\mathrm{asymp}(r)$']
+labels_all = [r'$V(r)$', r'$V_\mathrm{LR}(r)$']
 ax_all.legend(lines_all, labels_all, **legend_params)
 
 ax_all.xaxis.set_minor_locator(AutoMinorLocator())

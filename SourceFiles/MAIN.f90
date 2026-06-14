@@ -50,8 +50,8 @@ PROGRAM MAIN
 
 
 
-    V_ptr => V_2D_1
-    V_asymptotic_ptr => V_2D_1_asymptotic
+    V_ptr => V_2D_2
+    V_asymptotic_ptr => V_2D_2_asymptotic
     dstate_ptr => dstate1
     
 
@@ -336,6 +336,16 @@ PROGRAM MAIN
         CALL CONSOLE('Data successfully written to DATA/RydbergStates/Vdn.txt')
 
         ! Saving Vdn and eigE to bin files for later use
+        CALL CONSOLE('Caching V_params to binary file...')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/V_params.bin', &
+             FORM='unformatted', STATUS='replace', ACTION='write')
+        WRITE(iounit) V_params
+        CLOSE(iounit)
+        CALL CONSOLE('Caching eigEFull_H to binary files...')
+        OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_H.bin', &
+             FORM='unformatted', STATUS='replace', ACTION='write')
+        WRITE(iounit) eigEFull_H
+        CLOSE(iounit)
         CALL CONSOLE('Caching eigEFull_PHP and VdnFull to binary files...')
         OPEN(NEWUNIT=iounit, FILE='DATA/RydbergStates/eigE_PHP.bin', &
              FORM='unformatted', STATUS='replace', ACTION='write')

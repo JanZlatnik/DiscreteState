@@ -27,7 +27,7 @@ VA_name = cfg.get('legend_variable_name', 'R')
 VA_unit = cfg.get('legend_unit', '')
 
 base_path = r"./DATAcut"
-output_path = r"./Graphs/LevelShift"
+output_path = r"./Graphs/LevelShiftNOA"
 os.makedirs(output_path, exist_ok=True)
 
 potentials = cfg['potentials']
@@ -64,12 +64,10 @@ LEGEND_SIZE = 10
 SIZE = 6
 
 # Definice souborů křivek 
-# 0: Delta, 1: Gamma, 2: DeltaA, 3: GammaA, 4: Vde
+# 0: Delta, 1: Gamma, 2: Vde
 files_curves = [
     f"{base_path}/DSState/delta.txt",
     f"{base_path}/DSState/gamma.txt",
-    f"{base_path}/DSState/deltaA.txt",
-    f"{base_path}/DSState/gammaA.txt",
     f"{base_path}/DSState/Vde.txt"
 ]
 
@@ -120,10 +118,10 @@ y_range = cfg['LevelShift_y_range']
 
 
 # Barvy pro křivky
-colors_curves = ['blue', 'red', 'teal', 'orange', 'green']
-styles_curves = ['-', '-', '-.', '-.', '--'] 
-labels_curves = [r'$\Delta(\epsilon)$', r'$\Gamma(\epsilon)$', r'$\Delta_\mathrm{anc}(\epsilon)$', r'$\Gamma_\mathrm{anc}(\epsilon)$', r'$2\pi|V_{d\epsilon}|^2$']
-widths_curves = [1.5, 1.5, 1.2, 1.2, 1.2]
+colors_curves = ['blue', 'red', 'green']
+styles_curves = ['-', '-', '--'] 
+labels_curves = [r'$\Delta(\epsilon)$', r'$\Gamma(\epsilon)$', r'$2\pi|V_{d\epsilon}|^2$']
+widths_curves = [1.5, 1.5, 1.2]
 
 for (potindx, VA) in enumerate(potentials):
 
@@ -148,14 +146,20 @@ for (potindx, VA) in enumerate(potentials):
             x_plot = x[mask]
             y_plot = y_raw[mask]
 
-            if i == 4:
+            if i == 2:
                 y_plot = 2 * np.pi * (y_plot**2)
             
             y_plot[np.abs(y_plot) > 50] = np.nan
 
+            threshold = 3 * (y_range[1] - y_range[0])
+            jump_indices = np.where(np.abs(np.diff(y_plot)) > threshold)[0]
+            if len(jump_indices) > 0:
+                x_plot = np.insert(x_plot, jump_indices + 1, (x_plot[jump_indices] + x_plot[jump_indices + 1]) / 2)
+                y_plot = np.insert(y_plot, jump_indices + 1, np.nan)
+
             ax.plot(x_plot, y_plot, label=labels_curves[i], color=colors_curves[i], linestyle=styles_curves[i], linewidth=widths_curves[i])
             
-            if i < 4: 
+            if i < 2: 
                 lbl = labels_curves[i] if potindx == 0 else None
                 ax_all.plot(x_plot, y_plot, label=lbl, color=colors_curves[i], linestyle=styles_curves[i], linewidth=1.0, alpha=0.7)
 
@@ -168,7 +172,7 @@ for (potindx, VA) in enumerate(potentials):
         eig_vals = eig_vals[(eig_vals >= x_range[0]) & (eig_vals <= x_range[1])]
         
         ax.vlines(eig_vals, ymin=y_range[0], ymax=y_range[1], colors='gray', linestyles='solid', linewidth=0.75, alpha=0.6)
-        ax.plot([], [], color='gray', linestyle='solid', linewidth=1.0, label=r'$\epsilon_n^{\mathcal{P}}$')
+        ax.plot([], [], color='gray', linestyle='solid', linewidth=1.0, label=r'$\epsilon_n^{PHP}$')
     except: pass
 
     try:
@@ -177,7 +181,7 @@ for (potindx, VA) in enumerate(potentials):
         eig_vals = eig_vals[(eig_vals >= x_range[0]) & (eig_vals <= x_range[1])]
         
         ax.vlines(eig_vals, ymin=y_range[0], ymax=y_range[1], colors='black', linestyles='dotted', linewidth=0.75, alpha=0.6)
-        ax.plot([], [], color='black', linestyle='dotted', linewidth=1.0, label=r'$\epsilon_n$')
+        ax.plot([], [], color='black', linestyle='dotted', linewidth=1.0, label=r'$\epsilon_n^{H}$')
     except: pass
 
     try:
@@ -186,7 +190,7 @@ for (potindx, VA) in enumerate(potentials):
         x_line = np.linspace(x_range[0], x_range[1], 100)
         y_line = x_line - E_DS
         
-        ax.plot(x_line, y_line, color='purple', linestyle='--', linewidth=1.0, label=r'$\epsilon - \varepsilon_{d}$')
+        ax.plot(x_line, y_line, color='purple', linestyle='--', linewidth=1.0, label=r'$\epsilon + \epsilon_{d}$')
     except IndexError: pass
 
 

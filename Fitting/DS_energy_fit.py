@@ -33,8 +33,8 @@ aspect_ratio = cfg.get('aspect_ratio', 'square')
 SIZE = 6
 SMALL_SIZE = 14; MEDIUM_SIZE = 18; BIGGER_SIZE = 24; LEGEND_SIZE = 12
 
-X_axis = cfg.get('X_axis_R', r'Internuclear distance $R\,(a_0)$')
-Y_axis = cfg.get('Y_axis_E', r'Discrete state energy $\epsilon_d\,(\mathrm{eV})$')
+X_axis = r'Internuclear distance $R\,(a_0)$'
+Y_axis = r'Discrete state energy $\varepsilon_d\,(\mathrm{eV})$'
 color_data = cfg.get('color_data', 'black')
 color_fit = cfg.get('color_fit', 'red')
 
@@ -95,7 +95,7 @@ lines = [
     plt.Line2D([], [], color=color_fit, linestyle='-', linewidth=2)
 ]
 labels = [
-    r'Data: $\epsilon_d(R)$',
+    r'Data: $\varepsilon_d(R)$',
     r'Fit'
 ]
 

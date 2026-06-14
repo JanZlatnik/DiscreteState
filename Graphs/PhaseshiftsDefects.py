@@ -77,7 +77,7 @@ Y_axis = r'Phase shift $\delta(\epsilon)$'
 legends = [
     r'$\delta(\epsilon)$', r'$\delta_\mathrm{res}(\epsilon)$', r'$\delta_\mathrm{bg}(\epsilon)$', 
     r'$\pi\mu(\epsilon)$', r'$\pi\mu_\mathrm{res}(\epsilon)$', r'$\pi\mu_\mathrm{bg}(\epsilon)$',
-    r'$\pi\mu^H_n$', r'$\pi\mu^{PHP}_n$'
+    r'$\pi\mu_n$', r'$\pi\mu^{\mathcal{P}}_n$'
 ]
 labels = [0] * 8 
 labels_position = [(0,0)] * 8 

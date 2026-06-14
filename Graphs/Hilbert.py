@@ -47,14 +47,14 @@ legend_params = {
     'handletextpad': 0.5
 }
 
-filenames = [f"{base_path}/Hilbert/DeltaRydberg.txt",
-             f"{base_path}/DSState/delta.txt",
-             f"{base_path}/Hilbert/DeltaFull.txt",
-             f"{base_path}/Hilbert/DeltaContinuous.txt"]
+filenames = [f"{base_path}/DSState/delta.txt",
+             f"{base_path}/Hilbert/DeltaContinuous.txt",
+             f"{base_path}/Hilbert/DeltaRydberg.txt",
+             f"{base_path}/Hilbert/DeltaFull.txt"]
 
-legends = [[r'$\Delta_n(\epsilon)$'],[r'$\Delta(\epsilon)$'],[r'$\Delta_\mathrm{trans.}(\epsilon)$'],[r'$\Delta_\mathrm{cont.}(E)$']]
-colors = [['orange'],['blue'],['red'],['green']]
-line_styles = [[':'],['-'],['--'],['-.']]
+legends = [[r'$\Delta(\epsilon)$'],[r'$\Delta_\mathrm{cont.}(\epsilon)$'],[r'$\Delta_\mathrm{dis.}(\epsilon)$'],[r'$\Delta_\mathrm{trans.}(\epsilon)$']]
+colors = [['blue'],['green'],['orange'],['red']]
+line_styles = [['-'],['-.'],[':'],['--']]
 line_widths = [[''],[''],[''],['']]
 
 if plot_gamma:
@@ -117,6 +117,8 @@ for (potindx, VA) in enumerate(potentials):
     # Legendy, popisky, barvy a styly čar
     X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
     Y_axis = r'Level shift $\Delta(\epsilon)\,(\mathrm{eV})$'
+    if plot_gamma:
+        Y_axis = r'Level shift $F(\epsilon)\,(\mathrm{eV})$'
     labels = [[0]] * len(filenames)
     labels_position = [[(0,0)]] * len(filenames)
     markers = [['o', '^']] * len(filenames) 
@@ -194,7 +196,7 @@ for (potindx, VA) in enumerate(potentials):
                     abs_y_pos = labels_position[file_idx][0][1] 
                     ax.text(abs_x_pos, abs_y_pos, labels[file_idx][0], color=colors[file_idx][0], verticalalignment='bottom')
                 
-                include_in_all = (file_idx == 1 or file_idx == 2)
+                include_in_all = (file_idx == 0 or file_idx == 3)
                 if plot_gamma and (file_idx == 4 or file_idx == 5):
                     include_in_all = True
                 

@@ -32,7 +32,7 @@ SMALL_SIZE = 14; MEDIUM_SIZE = 18; BIGGER_SIZE = 24; LEGEND_SIZE = 12
 
 X_axis_E = r'Electron energy $\epsilon\,(\mathrm{eV})$'
 X_axis_R = r'Internuclear distance $R\,(a_0)$'
-Y_axis = r'Background phase shift $\delta_\mathrm{bg}(R,\epsilon)$'
+Y_axis = r'Background phase shift $\delta_\mathrm{bg}(\epsilon,R)$'
 
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams["font.serif"] = ["Latin Modern Roman"]
@@ -117,7 +117,7 @@ else:
 target_Rs = [0.7, 2.0, 10.0]
 colors_R = ['#1f77b4', '#2ca02c', '#d62728']
 custom_lines_R = [plt.Line2D([0], [0], color='black', marker='o', linestyle='', markersize=4, alpha=1.0)]
-custom_labels_R = [r'Data: $\delta_\mathrm{bg}(R,\epsilon)$']
+custom_labels_R = [r'Data: $\delta_\mathrm{bg}(\epsilon,R)$']
 
 for c, tr in zip(colors_R, target_Rs):
     idx = np.argmin(np.abs(R_vals - tr))
@@ -143,7 +143,7 @@ plt.close(fig1)
 target_Es = [0.0, 1.0, 2.0]
 colors_E = ['#1f77b4', '#2ca02c', '#d62728']
 custom_lines_E = [plt.Line2D([0], [0], color='black', marker='o', linestyle='', markersize=4, alpha=1.0)]
-custom_labels_E = [r'Data: $\delta_\mathrm{bg}(R,\epsilon)$']
+custom_labels_E = [r'Data: $\delta_\mathrm{bg}(\epsilon,R)$']
 
 for c, te in zip(colors_E, target_Es):
     idx = np.argmin(np.abs(E_vals - te))
