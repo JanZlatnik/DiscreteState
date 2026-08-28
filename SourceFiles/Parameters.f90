@@ -29,7 +29,7 @@ MODULE Parameters
     
     ! Computational settings
     LOGICAL, PARAMETER                  :: RydbergStates = .TRUE.
-    LOGICAL, PARAMETER                  :: dstate_computation = .FALSE.
+    LOGICAL, PARAMETER                  :: dstate_computation = .TRUE.
     LOGICAL, PARAMETER                  :: hilbert_computation = .FALSE.
     
         
@@ -41,7 +41,7 @@ MODULE Parameters
     ! Potential settings
     REAL(KIND = idk), PARAMETER         :: Vmin = 0.7d0                 ! potential parameter V_A - minimum
     REAL(KIND = idk), PARAMETER         :: Vmax = 10.0d0                ! potential parameter V_A - maximum
-    INTEGER, PARAMETER                  :: nv = 100                     ! number of diferent potential parameters calculated
+    INTEGER, PARAMETER                  :: nv = 20                      ! number of diferent potential parameters calculated
     REAL(KIND = idk), PARAMETER         :: Z = 1.0d0                    ! strenght of Coulombic potential, i.e. Z/r
 
     ! Bound state parameters
@@ -62,14 +62,14 @@ MODULE Parameters
     INTEGER, PARAMETER          :: mp = 5000
     
     ! Energy mesh settings
-    REAL(KIND = idk), PARAMETER :: Emin = -20.0d0/phys_h0       ! [eV] to [au]
-    REAL(KIND = idk), PARAMETER :: Emax = 20.0d0/phys_h0        ! [eV] to [au]
-    INTEGER, PARAMETER          :: ep = 200
+    REAL(KIND = idk), PARAMETER :: Emin = -10.0d0/phys_h0       ! [eV] to [au]
+    REAL(KIND = idk), PARAMETER :: Emax = 10.0d0/phys_h0        ! [eV] to [au]
+    INTEGER, PARAMETER          :: ep = 200000
 
     ! Other parameters
     REAL(KIND = idk), PARAMETER :: m = 1.0d0        ! mass in [au]
     INTEGER, PARAMETER          :: l_ang = 1        ! angular momentum quantum number of the detached electron (l=0 for s-wave detachment, l=1 for p-wave detachment, etc.)
-    REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]¨
+    REAL(KIND = idk), PARAMETER :: R0 = 2.0d0       ! position of wronskian evaluation [au]
     REAL(KIND = idk), PARAMETER :: nu_tol = 1.0d-3  ! COULCC analytic pole tolerance
     
     CONTAINS

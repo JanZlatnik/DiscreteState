@@ -80,7 +80,7 @@ ds_energies_data = np.loadtxt(f"{base_path}/DSState/DSenergies.txt", usecols=(1,
 
 # Popisky os
 X_axis = r'Electron energy $\epsilon\,(\mathrm{eV})$'
-Y_axis = r'Level shift $F(\epsilon)\,(\mathrm{eV})$' 
+Y_axis = r'Level shift $F(\epsilon;R,R)\,(\mathrm{eV})$' 
 
 # Nastavení LaTeX
 plt.rcParams['font.family'] = 'serif'
@@ -120,7 +120,7 @@ y_range = cfg['LevelShift_y_range']
 # Barvy pro křivky
 colors_curves = ['blue', 'red', 'green']
 styles_curves = ['-', '-', '--'] 
-labels_curves = [r'$\Delta(\epsilon)$', r'$\Gamma(\epsilon)$', r'$2\pi|V_{d\epsilon}|^2$']
+labels_curves = [r'$\Delta(\epsilon;R,R)$', r'$\Gamma(\epsilon;R,R)$', r'$2\pi|V_{d\epsilon}|^2$']
 widths_curves = [1.5, 1.5, 1.2]
 
 for (potindx, VA) in enumerate(potentials):

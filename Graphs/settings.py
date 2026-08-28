@@ -99,8 +99,8 @@ MODELS = {
         'PhaseShiftsDefects_ncol' : 2,
 
         # LevelShift
-        'LevelShift_x_range': [-7.5, 7.5],
-        'LevelShift_y_range': [-3.5, 3.5],
+        'LevelShift_x_range': [-2.5, 2.5],
+        'LevelShift_y_range': [-3, 3],
 
         # LevelShiftsFar
         'LevelShiftFar_base_path': r"./DATA",

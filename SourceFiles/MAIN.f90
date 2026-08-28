@@ -75,8 +75,8 @@ PROGRAM MAIN
     CALL CONSOLE('Energy computational grid created successfully.')
     
     ! Potential parameter grid
-    !CALL make_mesh(Vmin, Vmax, nv, V_params, dV)
-    CALL make_mesh_ndyn(Vmin, Vmax, 1.5d0, 4.0d0, nv, V_params)
+    CALL make_mesh(Vmin, Vmax, nv, V_params, dV)
+    !CALL make_mesh_ndyn(Vmin, Vmax, 1.5d0, 4.0d0, nv, V_params)
     CALL CONSOLE('Potential parameters grid created successfully.')
     
     
